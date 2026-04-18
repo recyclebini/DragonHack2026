@@ -1,0 +1,115 @@
+Found 7 clip(s) in /Users/tili/Documents/Faks/MAGISTERIJ/DragonHack2026/scripts/recordings
+
+=== deep-voice.m4a ===
+Clip-level features:
+  RMS mean: 0.1077
+  HNR proxy (median dB): 2.68
+  Spectral centroid median (Hz): 1354.1
+  F2 median (Hz): 1518.3
+  F0 median voiced (Hz): 133.0
+  Pitch range (semitones): 13.20
+  Spectral tilt proxy (median slope dB / log10 Hz): -21.228
+  --- not mapped to color ---
+  Spectral flatness median: 0.0009
+
+Mapping A (b*←centroid): CIELAB L*=36.86, a*=-33.89, b*=-30.72  Hex: #006687
+Mapping B (b*←tilt):     CIELAB L*=36.86, a*=-33.89, b*=-60.00  Hex: #006ab8
+Mapping C (b*←F2):      CIELAB L*=36.86, a*=-33.89, b*=-16.90  Hex: #006571
+
+=== grega.m4a ===
+Clip-level features:
+  RMS mean: 0.0926
+  HNR proxy (median dB): 2.19
+  Spectral centroid median (Hz): 1295.9
+  F2 median (Hz): 1545.4
+  F0 median voiced (Hz): 121.3
+  Pitch range (semitones): 14.70
+  Spectral tilt proxy (median slope dB / log10 Hz): -22.385
+  --- not mapped to color ---
+  Spectral flatness median: 0.0020
+
+Mapping A (b*←centroid): CIELAB L*=33.13, a*=-41.52, b*=-32.71  Hex: #005f81
+Mapping B (b*←tilt):     CIELAB L*=33.13, a*=-41.52, b*=-60.00  Hex: #0062ae
+Mapping C (b*←F2):      CIELAB L*=33.13, a*=-41.52, b*=-15.28  Hex: #005e65
+
+=== nina.m4a ===
+Clip-level features:
+  RMS mean: 0.1084
+  HNR proxy (median dB): 3.46
+  Spectral centroid median (Hz): 1664.3
+  F2 median (Hz): 1714.8
+  F0 median voiced (Hz): 241.1
+  Pitch range (semitones): 11.90
+  Spectral tilt proxy (median slope dB / log10 Hz): -19.978
+  --- not mapped to color ---
+  Spectral flatness median: 0.0026
+
+Mapping A (b*←centroid): CIELAB L*=71.26, a*=-21.70, b*=-20.08  Hex: #5cbbd2
+Mapping B (b*←tilt):     CIELAB L*=71.26, a*=-21.70, b*=-60.00  Hex: #00bfff
+Mapping C (b*←F2):      CIELAB L*=71.26, a*=-21.70, b*=-5.11  Hex: #78bab7
+
+=== pitchi.m4a ===
+Clip-level features:
+  RMS mean: 0.1050
+  HNR proxy (median dB): 8.78
+  Spectral centroid median (Hz): 1795.2
+  F2 median (Hz): 1681.1
+  F0 median voiced (Hz): 178.6
+  Pitch range (semitones): 10.00
+  Spectral tilt proxy (median slope dB / log10 Hz): -21.923
+  --- not mapped to color ---
+  Spectral flatness median: 0.0031
+
+Mapping A (b*←centroid): CIELAB L*=51.36, a*=61.02, b*=-15.59  Hex: #cd4697
+Mapping B (b*←tilt):     CIELAB L*=51.36, a*=61.02, b*=-60.00  Hex: #a94fe3
+Mapping C (b*←F2):      CIELAB L*=51.36, a*=61.02, b*=-7.13  Hex: #d14488
+
+=== sinja.m4a ===
+Clip-level features:
+  RMS mean: 0.0960
+  HNR proxy (median dB): 7.05
+  Spectral centroid median (Hz): 1582.0
+  F2 median (Hz): 1564.1
+  F0 median voiced (Hz): 234.3
+  Pitch range (semitones): 9.50
+  Spectral tilt proxy (median slope dB / log10 Hz): -21.675
+  --- not mapped to color ---
+  Spectral flatness median: 0.0020
+
+Mapping A (b*←centroid): CIELAB L*=69.08, a*=34.13, b*=-22.90  Hex: #d393d3
+Mapping B (b*←tilt):     CIELAB L*=69.08, a*=34.13, b*=-60.00  Hex: #a698ff
+Mapping C (b*←F2):      CIELAB L*=69.08, a*=34.13, b*=-14.15  Hex: #da92c3
+
+=== tilen-test.m4a ===
+Clip-level features:
+  RMS mean: 0.0766
+  HNR proxy (median dB): 4.72
+  Spectral centroid median (Hz): 1220.2
+  F2 median (Hz): 1456.1
+  F0 median voiced (Hz): 130.3
+  Pitch range (semitones): 11.20
+  Spectral tilt proxy (median slope dB / log10 Hz): -31.242
+  --- not mapped to color ---
+  Spectral flatness median: 0.0022
+
+Mapping A (b*←centroid): CIELAB L*=36.02, a*=-2.18, b*=-35.31  Hex: #00598d
+Mapping B (b*←tilt):     CIELAB L*=36.02, a*=-2.18, b*=-60.00  Hex: #005cb6
+Mapping C (b*←F2):      CIELAB L*=36.02, a*=-2.18, b*=-20.63  Hex: #385775
+
+=== tilen.m4a ===
+Clip-level features:
+  RMS mean: 0.0997
+  HNR proxy (median dB): 2.57
+  Spectral centroid median (Hz): 1378.6
+  F2 median (Hz): 1625.8
+  F0 median voiced (Hz): 129.2
+  Pitch range (semitones): 18.10
+  Spectral tilt proxy (median slope dB / log10 Hz): -25.296
+  --- not mapped to color ---
+  Spectral flatness median: 0.0020
+
+Mapping A (b*←centroid): CIELAB L*=35.66, a*=-35.63, b*=-29.88  Hex: #006483
+Mapping B (b*←tilt):     CIELAB L*=35.66, a*=-35.63, b*=-60.00  Hex: #0067b5
+Mapping C (b*←F2):      CIELAB L*=35.66, a*=-35.63, b*=-10.45  Hex: #006264
+
+Saved concatenated voice-color image (A mapping): /Users/tili/Documents/Faks/MAGISTERIJ/DragonHack2026/scripts/voice_colors_concat.png
