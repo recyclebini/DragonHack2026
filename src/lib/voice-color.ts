@@ -14,13 +14,10 @@ export type VoiceColor = {
 
 // Map features → HSL color
 export function featuresToColor(f: VoiceFeatures): string {
-  // Hue from brightness (timbre): 0 (warm reds) → 280 (cool purples)
   const hue = Math.round(f.brightness * 320);
-  // Lightness from pitch: low pitch → darker, high pitch → lighter
-  // typical voice 80–500Hz → map log scale
   const p = Math.max(60, Math.min(800, f.pitch || 150));
   const norm = (Math.log(p) - Math.log(60)) / (Math.log(800) - Math.log(60));
-  const lightness = 30 + norm * 50; // 30%..80%
+  const lightness = 30 + norm * 50;
   const saturation = 55 + Math.min(35, f.energy * 60);
   return chroma.hsl(hue, saturation / 100, lightness / 100).hex();
 }
@@ -86,9 +83,21 @@ export function harmonyScores(target: string, others: string[]): number[] {
   return others.map((o) => {
     const oH = chroma(o).hsl()[0] || 0;
     const diff = Math.min(Math.abs(tH - oH), 360 - Math.abs(tH - oH));
-    // analogous (~30) or complementary (~180) get high score
     const analog = Math.max(0, 1 - Math.abs(diff - 30) / 30);
     const comp = Math.max(0, 1 - Math.abs(diff - 180) / 30);
     return Math.max(analog, comp);
   });
+}
+
+// Average the colors of a group of voices — for "group voice" feature
+export function groupColor(hexes: string[]): string {
+  if (hexes.length === 0) return "#7a5cff";
+  if (hexes.length === 1) return hexes[0];
+  // Average in oklab for perceptually accurate blending
+  const colors = hexes.map((h) => chroma(h).oklab());
+  const avg = colors.reduce(
+    (acc, [l, a, b]) => [acc[0] + l, acc[1] + a, acc[2] + b],
+    [0, 0, 0]
+  ).map((v) => v / colors.length) as [number, number, number];
+  return chroma.oklab(...avg).hex();
 }
