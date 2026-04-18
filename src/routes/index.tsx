@@ -128,7 +128,7 @@ function RecordPage() {
                 <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">{desc.name}</p>
                 <p className="font-mono text-sm">{desc.hex.toUpperCase()}</p>
                 <p className="font-serif text-sm text-muted-foreground/70 mt-2 italic text-balance">
-                  This is your color - stable, personal, yours. However you speak, this is who you are.
+                  This is your color — stable, personal, yours. However you speak, this is who you are.
                 </p>
                 <p className="font-serif text-xl mt-3 text-balance">"{desc.poem}"</p>
               </div>
