@@ -13,8 +13,14 @@ export function useVoiceAnalyzer() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const smoothRef = useRef({ pitch: 150, brightness: 0.5, energy: 0, hnr: 0.5 });
+  const samplesRef = useRef<string[]>([]);
+  const sampleIntervalRef = useRef<number | null>(null);
 
-  const stop = useCallback(() => {
+  const stop = useCallback((): string[] => {
+    if (sampleIntervalRef.current !== null) {
+      clearInterval(sampleIntervalRef.current);
+      sampleIntervalRef.current = null;
+    }
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -25,9 +31,17 @@ export function useVoiceAnalyzer() {
     ctxRef.current = null;
     analyserRef.current = null;
     setState("idle");
+    const collected = [...samplesRef.current];
+    samplesRef.current = [];
+    return collected;
   }, []);
 
   const start = useCallback(async () => {
+    samplesRef.current = [];
+    if (sampleIntervalRef.current !== null) {
+      clearInterval(sampleIntervalRef.current);
+      sampleIntervalRef.current = null;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -40,6 +54,12 @@ export function useVoiceAnalyzer() {
       src.connect(analyser);
       analyserRef.current = analyser;
       setState("listening");
+      sampleIntervalRef.current = window.setInterval(() => {
+        const f = smoothRef.current;
+        samplesRef.current.push(
+          featuresToColor({ pitch: f.pitch, brightness: f.brightness, energy: f.energy, hnr: f.hnr })
+        );
+      }, 200);
       tick();
     } catch (e) {
       console.error(e);
@@ -60,13 +80,11 @@ export function useVoiceAnalyzer() {
       analyser.getFloatTimeDomainData(time);
       analyser.getByteFrequencyData(freq);
 
-      // RMS energy
       let sum = 0;
       for (let i = 0; i < time.length; i++) sum += time[i] * time[i];
       const rms = Math.sqrt(sum / time.length);
       const energy = Math.min(1, rms * 6);
 
-      // Spectral centroid (brightness)
       let num = 0;
       let den = 0;
       for (let i = 0; i < freq.length; i++) {
@@ -76,10 +94,8 @@ export function useVoiceAnalyzer() {
       const centroidBin = den > 0 ? num / den : 0;
       const nyquist = ctx.sampleRate / 2;
       const centroidHz = (centroidBin / freq.length) * nyquist;
-      // Linear 500–4000 Hz matches Python normalization range
       const brightness = Math.min(1, Math.max(0, (centroidHz - 500) / (4000 - 500)));
 
-      // Autocorrelation pitch + clarity (clarity = HNR proxy)
       let pitch = smoothRef.current.pitch;
       let hnr = 0;
       if (energy > 0.04) {
@@ -87,7 +103,6 @@ export function useVoiceAnalyzer() {
         if (hz > 0) { pitch = hz; hnr = clarity; }
       }
 
-      // Smoothing
       const s = smoothRef.current;
       s.pitch = s.pitch * 0.7 + pitch * 0.3;
       s.brightness = s.brightness * 0.8 + brightness * 0.2;
@@ -103,13 +118,11 @@ export function useVoiceAnalyzer() {
     loop();
   };
 
-  useEffect(() => () => stop(), [stop]);
+  useEffect(() => () => { stop(); }, [stop]);
 
   return { state, start, stop, color, features };
 }
 
-// Autocorrelation pitch detection.
-// Returns hz (fundamental frequency) and clarity (0..1, periodicity strength = HNR proxy).
 function autoCorrelate(buf: Float32Array, sampleRate: number): { hz: number; clarity: number } {
   const none = { hz: -1, clarity: 0 };
   const SIZE = buf.length;
@@ -147,7 +160,6 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): { hz: number; cla
   if (a) T0 = T0 - b / (2 * a);
   const hz = sampleRate / T0;
   if (hz < 60 || hz > 800) return none;
-  // clarity: normalized correlation at fundamental — 1.0 = pure tone, 0 = noise
   const clarity = c[0] > 0 ? Math.min(1, maxval / c[0]) : 0;
   return { hz, clarity };
 }
