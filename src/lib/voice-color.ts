@@ -104,3 +104,29 @@ export function groupColor(hexes: string[]): string {
   ).map((v) => v / colors.length) as [number, number, number];
   return chroma.oklab(...avg).hex();
 }
+
+export type EmotionResult = {
+  color: string;
+  fontStyle: "normal" | "italic";
+  fontWeight: number;
+  textTransform: "none" | "uppercase";
+  emotionLabel: string;
+};
+
+export function applyEmotion(identityHex: string, f: VoiceFeatures): EmotionResult {
+  const shift = (deg: number): string => {
+    try { return chroma(identityHex).set("hsl.h", `+${deg}`).hex(); }
+    catch { return identityHex; }
+  };
+  if (f.pitch > 250 && f.energy > 0.5)
+    return { color: shift(30), fontStyle: "normal", fontWeight: 600, textTransform: "none", emotionLabel: "Happy" };
+  if (f.pitch < 150 && f.energy < 0.3)
+    return { color: shift(-30), fontStyle: "italic", fontWeight: 300, textTransform: "none", emotionLabel: "Sad" };
+  if (f.energy > 0.7 && f.pitch < 200)
+    return { color: shift(-60), fontStyle: "normal", fontWeight: 800, textTransform: "uppercase", emotionLabel: "Intense" };
+  if (f.energy < 0.3 && f.pitch > 250)
+    return { color: shift(60), fontStyle: "italic", fontWeight: 400, textTransform: "none", emotionLabel: "Nervous" };
+  if (f.energy < 0.4 && f.pitch > 150 && f.pitch < 250)
+    return { color: shift(15), fontStyle: "italic", fontWeight: 300, textTransform: "none", emotionLabel: "Tender" };
+  return { color: identityHex, fontStyle: "normal", fontWeight: 400, textTransform: "none", emotionLabel: "Neutral" };
+}
