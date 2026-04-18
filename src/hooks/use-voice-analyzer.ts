@@ -76,7 +76,10 @@ export function useVoiceAnalyzer() {
       const centroidBin = den > 0 ? num / den : 0;
       const nyquist = ctx.sampleRate / 2;
       const centroidHz = (centroidBin / freq.length) * nyquist;
-      const brightness = Math.min(1, Math.max(0, (centroidHz - 200) / 3000));
+      // Log scale over 300–8000 Hz spreads voice types evenly (linear scale clips at pink for all speech)
+      const brightness = Math.min(1, Math.max(0,
+        (Math.log(Math.max(centroidHz, 300)) - Math.log(300)) / (Math.log(8000) - Math.log(300))
+      ));
 
       // Autocorrelation pitch (only if energy is decent)
       let pitch = smoothRef.current.pitch;

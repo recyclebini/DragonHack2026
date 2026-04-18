@@ -6,6 +6,7 @@ import { Sparkles, Trash2, Users } from "lucide-react";
 import { clearVoices, getVoices, type SavedVoice } from "@/lib/voice-store";
 import { harmonyScores, groupColor, nameForColor, poemForColor } from "@/lib/voice-color";
 import { VoiceCard } from "@/components/VoiceCard";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/map")({
   head: () => ({
@@ -37,14 +38,39 @@ function MapPage() {
   const [size, setSize] = useState({ w: 800, h: 520 });
 
   useEffect(() => {
-    setVoices(getVoices());
+    getVoices().then(setVoices);
+
+    // Real-time: new voices appear on map as people record them
+    const channel = supabase
+      .channel("voices-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "voices" }, (payload) => {
+        const r = payload.new as Record<string, unknown>;
+        const v: SavedVoice = {
+          id: r.id as string,
+          name: r.name as string,
+          hex: r.hex as string,
+          colorName: r.color_name as string,
+          poem: r.poem as string,
+          createdAt: new Date(r.created_at as string).getTime(),
+        };
+        setVoices((prev) => prev.some((x) => x.id === v.id) ? prev : [...prev, v]);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "voices" }, (payload) => {
+        setVoices((prev) => prev.filter((v) => v.id !== (payload.old as { id: string }).id));
+      })
+      .subscribe();
+
     const onResize = () => {
       const w = Math.min(1100, window.innerWidth - 60);
       setSize({ w, h: Math.max(420, Math.min(640, w * 0.6)) });
     };
     onResize();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   const selectedVoice = voices.find((v) => v.id === selected) ?? null;
@@ -60,9 +86,11 @@ function MapPage() {
   const groupName = useMemo(() => nameForColor(groupHex), [groupHex]);
   const groupPoem = useMemo(() => poemForColor(groupHex), [groupHex]);
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (confirm("Clear all saved voices?")) {
-      clearVoices(); setVoices([]); setSelected(null);
+      await clearVoices();
+      setVoices([]);
+      setSelected(null);
     }
   };
 
@@ -74,7 +102,7 @@ function MapPage() {
           <div>
             <h1 className="font-display text-4xl font-semibold">Voice Map</h1>
             <p className="text-muted-foreground mt-1">
-              {voices.length} {voices.length === 1 ? "voice" : "voices"} saved · click a dot to inspect
+              {voices.length} {voices.length === 1 ? "voice" : "voices"} · click a dot to inspect
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -151,16 +179,10 @@ function MapPage() {
                 );
               })}
 
-              {/* Group color orb — center of canvas */}
               {showGroup && (
                 <div
                   className="absolute pointer-events-none"
-                  style={{
-                    left: size.w / 2 - 60,
-                    top: size.h / 2 - 60,
-                    width: 120,
-                    height: 120,
-                  }}
+                  style={{ left: size.w / 2 - 60, top: size.h / 2 - 60, width: 120, height: 120 }}
                 >
                   <div
                     className="w-full h-full rounded-full animate-blob"
@@ -178,7 +200,6 @@ function MapPage() {
           )}
         </div>
 
-        {/* Group voice panel */}
         {showGroup && voices.length >= 2 && (
           <div className="mt-10 glass rounded-2xl p-6 max-w-xl animate-fade-up">
             <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground mb-3">Your group voice</p>
@@ -199,7 +220,6 @@ function MapPage() {
           </div>
         )}
 
-        {/* Selected voice panel */}
         {selectedVoice && !showGroup && (
           <div className="mt-10 grid md:grid-cols-2 gap-10 items-start animate-fade-up">
             <VoiceCard voice={selectedVoice} />
