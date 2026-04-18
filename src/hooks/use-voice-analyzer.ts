@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { featuresToColor, type VoiceFeatures } from "@/lib/voice-color";
+import { DEFAULT_VOICE_HEX, featuresToColor, type VoiceFeatures } from "@/lib/voice-color";
 
 export type AnalyzerState = "idle" | "listening" | "denied" | "error";
 
 export function useVoiceAnalyzer() {
   const [state, setState] = useState<AnalyzerState>("idle");
-  const [color, setColor] = useState<string>("#7a5cff");
+  const [color, setColor] = useState<string>(DEFAULT_VOICE_HEX);
   const [features, setFeatures] = useState<VoiceFeatures>({ pitch: 0, brightness: 0.5, energy: 0, hnr: 0.5 });
 
   const ctxRef = useRef<AudioContext | null>(null);

@@ -19,10 +19,22 @@ export function SiteHeader() {
     <>
       <header className="sticky top-0 z-50">
         <div className="mx-auto max-w-6xl px-5 py-4">
-          <div className="glass rounded-full px-5 py-3 flex items-center justify-between">
-            <Link to="/" className="font-display font-semibold tracking-tight text-lg">
-              <span className="bg-gradient-to-r from-[oklch(0.85_0.15_30)] via-[oklch(0.8_0.18_180)] to-[oklch(0.78_0.18_320)] bg-clip-text text-transparent">
-                Chromavoice
+          <div className="glass rounded-full px-4 h-11 flex items-center justify-between sm:px-5">
+            <Link
+              to="/"
+              className="flex shrink-0 items-center gap-2.5 py-0.5"
+              aria-label="Seenesthesia home"
+            >
+              <img
+                src="/favicon.png"
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-lg object-cover ring-1 ring-border/60"
+                decoding="async"
+              />
+              <span className="font-serif text-lg font-normal not-italic tracking-tight text-[oklch(0.84_0.02_280)]">
+                seenesthesia
               </span>
             </Link>
             <nav className="flex items-center gap-1 text-sm">
