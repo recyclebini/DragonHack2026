@@ -40,7 +40,7 @@ function ConversationPage() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const { state, start, stop, features } = useVoiceAnalyzer();
 
-  useEffect(() => { getVoices().then(setSavedVoices); }, []);
+  useEffect(() => { getVoices().then(setSavedVoices).catch(() => {}); }, []);
 
   useEffect(() => {
     if (transcriptRef.current)
