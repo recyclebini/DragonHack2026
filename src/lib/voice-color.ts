@@ -13,12 +13,14 @@ export type VoiceColor = {
 };
 
 // Map features → HSL color
+// Pitch is the primary hue driver: bass (80Hz) → reds/oranges, tenor (200Hz) → greens/teals, soprano (400Hz+) → blues/purples
+// Brightness (spectral centroid) adds a ±80° timbral shift for variation within a pitch range
 export function featuresToColor(f: VoiceFeatures): string {
-  const hue = Math.round(f.brightness * 320);
   const p = Math.max(60, Math.min(800, f.pitch || 150));
-  const norm = (Math.log(p) - Math.log(60)) / (Math.log(800) - Math.log(60));
-  const lightness = 30 + norm * 50;
-  const saturation = 55 + Math.min(35, f.energy * 60);
+  const pitchNorm = (Math.log(p) - Math.log(60)) / (Math.log(800) - Math.log(60));
+  const hue = (Math.round(pitchNorm * 240 + f.brightness * 80) + 360) % 360;
+  const lightness = 35 + Math.min(f.energy * 25, 20);
+  const saturation = 65 + Math.min(f.energy * 20, 15);
   return chroma.hsl(hue, saturation / 100, lightness / 100).hex();
 }
 

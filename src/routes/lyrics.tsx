@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import chroma from "chroma-js";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,8 +41,10 @@ function colorForWord(word: string, lineIndex: number, totalLines: number, voice
 
 function LyricsPage() {
   const [text, setText] = useState(SAMPLE);
-  const voices = useMemo(() => getVoices(), []);
+  const [voices, setVoices] = useState<SavedVoice[]>([]);
   const lines = useMemo(() => text.split("\n"), [text]);
+
+  useEffect(() => { getVoices().then(setVoices); }, []);
 
   return (
     <div className="min-h-screen">

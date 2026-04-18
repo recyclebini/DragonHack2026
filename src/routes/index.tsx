@@ -40,12 +40,16 @@ function RecordPage() {
     setLocked(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!locked) return;
-    saveVoice({ name: name.trim() || "Anonymous", hex: desc.hex, colorName: desc.name, poem: desc.poem });
-    toast.success(`${name || "Your voice"} added to the map`);
-    setName("");
-    setLocked(null);
+    try {
+      await saveVoice({ name: name.trim() || "Anonymous", hex: desc.hex, colorName: desc.name, poem: desc.poem });
+      toast.success(`${name || "Your voice"} added to the map`);
+      setName("");
+      setLocked(null);
+    } catch {
+      toast.error("Failed to save — check your connection.");
+    }
   };
 
   return (
