@@ -9,18 +9,30 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VisualizeRouteImport } from './routes/visualize'
+import { Route as MusicRouteImport } from './routes/music'
 import { Route as MapRouteImport } from './routes/map'
-import { Route as LyricsRouteImport } from './routes/lyrics'
+import { Route as ConversationRouteImport } from './routes/conversation'
 import { Route as IndexRouteImport } from './routes/index'
 
+const VisualizeRoute = VisualizeRouteImport.update({
+  id: '/visualize',
+  path: '/visualize',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MusicRoute = MusicRouteImport.update({
+  id: '/music',
+  path: '/music',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MapRoute = MapRouteImport.update({
   id: '/map',
   path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LyricsRoute = LyricsRouteImport.update({
-  id: '/lyrics',
-  path: '/lyrics',
+const ConversationRoute = ConversationRouteImport.update({
+  id: '/conversation',
+  path: '/conversation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,36 +43,58 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/lyrics': typeof LyricsRoute
+  '/conversation': typeof ConversationRoute
   '/map': typeof MapRoute
+  '/music': typeof MusicRoute
+  '/visualize': typeof VisualizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/lyrics': typeof LyricsRoute
+  '/conversation': typeof ConversationRoute
   '/map': typeof MapRoute
+  '/music': typeof MusicRoute
+  '/visualize': typeof VisualizeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/lyrics': typeof LyricsRoute
+  '/conversation': typeof ConversationRoute
   '/map': typeof MapRoute
+  '/music': typeof MusicRoute
+  '/visualize': typeof VisualizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/lyrics' | '/map'
+  fullPaths: '/' | '/conversation' | '/map' | '/music' | '/visualize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/lyrics' | '/map'
-  id: '__root__' | '/' | '/lyrics' | '/map'
+  to: '/' | '/conversation' | '/map' | '/music' | '/visualize'
+  id: '__root__' | '/' | '/conversation' | '/map' | '/music' | '/visualize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LyricsRoute: typeof LyricsRoute
+  ConversationRoute: typeof ConversationRoute
   MapRoute: typeof MapRoute
+  MusicRoute: typeof MusicRoute
+  VisualizeRoute: typeof VisualizeRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/visualize': {
+      id: '/visualize'
+      path: '/visualize'
+      fullPath: '/visualize'
+      preLoaderRoute: typeof VisualizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/music': {
+      id: '/music'
+      path: '/music'
+      fullPath: '/music'
+      preLoaderRoute: typeof MusicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/map': {
       id: '/map'
       path: '/map'
@@ -68,11 +102,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/lyrics': {
-      id: '/lyrics'
-      path: '/lyrics'
-      fullPath: '/lyrics'
-      preLoaderRoute: typeof LyricsRouteImport
+    '/conversation': {
+      id: '/conversation'
+      path: '/conversation'
+      fullPath: '/conversation'
+      preLoaderRoute: typeof ConversationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -87,8 +121,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LyricsRoute: LyricsRoute,
+  ConversationRoute: ConversationRoute,
   MapRoute: MapRoute,
+  MusicRoute: MusicRoute,
+  VisualizeRoute: VisualizeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

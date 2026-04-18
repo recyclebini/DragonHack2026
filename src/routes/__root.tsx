@@ -1,4 +1,5 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -40,14 +41,17 @@ export const Route = createRootRoute({
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Chromavoice" },
       { name: "twitter:description", content: "Voice Painter Studio transforms your voice into a dynamic, real-time color experience." },
+      { name: "theme-color", content: "#0d0d0d" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Chromavoice" },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cd0ff467-769c-4b84-90ba-6200fd684211/id-preview-c62dc5fc--fa2f81d3-3dbc-4038-8187-17785b6f0a4a.lovable.app-1776511055743.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cd0ff467-769c-4b84-90ba-6200fd684211/id-preview-c62dc5fc--fa2f81d3-3dbc-4038-8187-17785b6f0a4a.lovable.app-1776511055743.png" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icon-192.svg" },
     ],
   }),
   shellComponent: RootShell,
@@ -70,6 +74,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   return (
     <>
       <Outlet />

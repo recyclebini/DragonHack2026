@@ -1,0 +1,14 @@
+{
+  "name": "Chromavoice",
+  "short_name": "Chromavoice",
+  "description": "Turn your voice into a living color.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

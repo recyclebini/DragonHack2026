@@ -30,7 +30,7 @@ function posFor(id: string, w: number, h: number) {
   };
 }
 
-function MapPage() {
+export function MapPage({ hideSiteHeader }: { hideSiteHeader?: boolean } = {}) {
   const [voices, setVoices] = useState<SavedVoice[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showHarmony, setShowHarmony] = useState(false);
@@ -96,8 +96,8 @@ function MapPage() {
 
   return (
     <div className="min-h-screen">
-      <SiteHeader />
-      <main className="mx-auto max-w-6xl px-5 pt-6 pb-24">
+      {!hideSiteHeader && <SiteHeader />}
+      <main className="mx-auto max-w-6xl px-5 pt-6 pb-36 md:pb-24">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="font-display text-4xl font-semibold">Voice Map</h1>
