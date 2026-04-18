@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/lyrics")({
   head: () => ({
     meta: [
-      { title: "Lyrics in Color — Chromavoice" },
+      { title: "Lyrics in Color — Seenesthesia" },
       { name: "description", content: "Upload a song. Watch it become color." },
     ],
   }),
