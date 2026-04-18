@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { analyzeSegment } from "@/lib/audio-analysis";
 import { featuresToColor, applyEmotion, groupColor, nameForColor, poemForColor } from "@/lib/voice-color";
@@ -27,6 +27,9 @@ function MusicPage() {
   const [hoverInfo, setHoverInfo]   = useState<{ x: number; label: string } | null>(null);
   const audioRef   = useRef<HTMLAudioElement>(null);
   const ribbonRef  = useRef<HTMLDivElement>(null);
+  const actxRef    = useRef<AudioContext | null>(null);
+
+  useEffect(() => () => { actxRef.current?.close(); }, []);
 
   const processFile = async (file: File) => {
     if (!/\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(file.name)) {
@@ -41,6 +44,7 @@ function MusicPage() {
 
     const arrayBuffer = await file.arrayBuffer();
     const actx = new AudioContext();
+    actxRef.current = actx;
     let decoded: AudioBuffer;
     try {
       decoded = await actx.decodeAudioData(arrayBuffer);
@@ -73,6 +77,7 @@ function MusicPage() {
         setProcessing(false);
         setAudioUrl(URL.createObjectURL(file));
         actx.close();
+        actxRef.current = null;
       }
     };
 
@@ -113,7 +118,7 @@ function MusicPage() {
             onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
           >
             <p className="font-display text-lg mb-1">Drop audio file here</p>
-            <p className="text-sm text-muted-foreground">MP3 · WAV · OGG · FLAC · AAC</p>
+            <p className="text-sm text-muted-foreground">MP3 · WAV · OGG · FLAC · AAC · M4A</p>
             <input type="file" accept=".mp3,.wav,.ogg,.flac,.aac,.m4a" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
           </label>
         )}
@@ -231,7 +236,7 @@ function MusicPage() {
             )}
 
             <button
-              onClick={() => { setSegments([]); setAudioUrl(null); setCurrentTime(0); setProgress(0); }}
+              onClick={() => { actxRef.current?.close(); actxRef.current = null; setSegments([]); setAudioUrl(null); setCurrentTime(0); setProgress(0); }}
               className="text-sm text-muted-foreground hover:text-foreground transition"
             >
               ← Try another file
