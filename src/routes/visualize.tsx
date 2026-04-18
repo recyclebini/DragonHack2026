@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useVoiceAnalyzer } from "@/hooks/use-voice-analyzer";
-import { applyEmotion, featuresToColor } from "@/lib/voice-color";
+import { applyEmotion } from "@/lib/voice-color";
 import type { VoiceFeatures } from "@/lib/voice-color";
 
 export const Route = createFileRoute("/visualize")({
