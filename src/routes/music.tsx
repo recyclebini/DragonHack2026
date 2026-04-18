@@ -114,7 +114,7 @@ function MusicPage() {
           >
             <p className="font-display text-lg mb-1">Drop audio file here</p>
             <p className="text-sm text-muted-foreground">MP3 · WAV · OGG · FLAC · AAC</p>
-            <input type="file" accept=".mp3,.wav,.ogg,.flac,.aac" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
+            <input type="file" accept=".mp3,.wav,.ogg,.flac,.aac,.m4a" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
           </label>
         )}
 
