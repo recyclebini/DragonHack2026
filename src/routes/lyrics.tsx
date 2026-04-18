@@ -151,9 +151,7 @@ function LyricsPage() {
         for (let i = 0; i < freqData.length; i++) { num += i * freqData[i]; den += freqData[i]; }
         const nyquist = ctx.sampleRate / 2;
         const centroidHz = den > 0 ? (num / den / freqData.length) * nyquist : 500;
-        const brightness = Math.min(1, Math.max(0,
-          (Math.log(Math.max(centroidHz, 300)) - Math.log(300)) / (Math.log(8000) - Math.log(300))
-        ));
+        const brightness = Math.min(1, Math.max(0, (centroidHz - 500) / (4000 - 500)));
 
         const features = analyzeSegment(bufferRef.current!, Math.max(0, elapsed - 0.1), elapsed + 0.05);
         setCurrentColor(featuresToColor({ ...features, brightness, energy }));

@@ -1,9 +1,10 @@
 import chroma from "chroma-js";
 
 export type VoiceFeatures = {
-  pitch: number; // Hz
-  brightness: number; // spectral centroid normalized 0..1
-  energy: number; // RMS 0..1
+  pitch: number;      // Hz, fundamental frequency
+  brightness: number; // spectral centroid normalized 0..1 (500–4000 Hz linear)
+  energy: number;     // RMS 0..1
+  hnr: number;        // harmonic-to-noise ratio proxy 0..1 (autocorrelation clarity)
 };
 
 export type VoiceColor = {
@@ -12,16 +13,16 @@ export type VoiceColor = {
   poem: string;
 };
 
-// Map features → HSL color
-// Pitch is the primary hue driver: bass (80Hz) → reds/oranges, tenor (200Hz) → greens/teals, soprano (400Hz+) → blues/purples
-// Brightness (spectral centroid) adds a ±80° timbral shift for variation within a pitch range
+// CIELAB mapping — mirrors the Python script's Mapping A:
+//   pitch 80–300 Hz  → L* 20–90  (low pitch = dark, high pitch = bright)
+//   hnr   0–1        → a* -60–+80 (noisy/breathy = green, harmonic/clear = red)
+//   centroid 0–1     → b* -60–+60 (dark timbre = blue, bright timbre = yellow)
 export function featuresToColor(f: VoiceFeatures): string {
-  const p = Math.max(60, Math.min(800, f.pitch || 150));
-  const pitchNorm = (Math.log(p) - Math.log(60)) / (Math.log(800) - Math.log(60));
-  const hue = (Math.round(pitchNorm * 240 + f.brightness * 80) + 360) % 360;
-  const lightness = 35 + Math.min(f.energy * 25, 20);
-  const saturation = 65 + Math.min(f.energy * 20, 15);
-  return chroma.hsl(hue, saturation / 100, lightness / 100).hex();
+  const pitchNorm = Math.max(0, Math.min(1, ((f.pitch || 150) - 80) / (300 - 80)));
+  const L = 20 + pitchNorm * 70;
+  const A = -60 + (f.hnr ?? 0.5) * 140;
+  const B = -60 + f.brightness * 120;
+  return chroma.lab(L, A, B).hex();
 }
 
 const HUE_NAMES: { range: [number, number]; words: string[] }[] = [
