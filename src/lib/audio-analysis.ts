@@ -1,12 +1,12 @@
 import { featuresToColor, type VoiceFeatures } from "./voice-color";
 
-// Autocorrelation pitch detection (same algorithm as use-voice-analyzer)
-export function autoCorrelate(buf: Float32Array, sampleRate: number): number {
+function autoCorrelateWithClarity(buf: Float32Array, sampleRate: number): { hz: number; clarity: number } {
+  const none = { hz: -1, clarity: 0 };
   const SIZE = buf.length;
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.005) return -1;
+  if (rms < 0.005) return none;
 
   let r1 = 0, r2 = SIZE - 1;
   const thres = 0.2;
@@ -23,14 +23,21 @@ export function autoCorrelate(buf: Float32Array, sampleRate: number): number {
   while (c[d] > c[d + 1]) d++;
   let maxval = -1, maxpos = -1;
   for (let i = d; i < n; i++) if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
-  if (maxpos <= 0) return -1;
+  if (maxpos <= 0) return none;
 
   const x1 = c[maxpos - 1] ?? 0, x2 = c[maxpos], x3 = c[maxpos + 1] ?? 0;
   const a = (x1 + x3 - 2 * x2) / 2;
   const b = (x3 - x1) / 2;
   const T0 = a ? maxpos - b / (2 * a) : maxpos;
   const hz = sampleRate / T0;
-  return hz >= 60 && hz <= 800 ? hz : -1;
+  if (hz < 60 || hz > 800) return none;
+  const clarity = c[0] > 0 ? Math.min(1, maxval / c[0]) : 0;
+  return { hz, clarity };
+}
+
+// Kept for any external callers that only need hz
+export function autoCorrelate(buf: Float32Array, sampleRate: number): number {
+  return autoCorrelateWithClarity(buf, sampleRate).hz;
 }
 
 // Analyze a segment of an AudioBuffer → VoiceFeatures → hex color
@@ -40,28 +47,27 @@ export function analyzeSegment(buffer: AudioBuffer, startSec: number, endSec: nu
   const e = Math.min(Math.floor(endSec * sr), buffer.length);
   const samples = buffer.getChannelData(0).slice(s, e);
 
-  if (samples.length < 64) return { pitch: 150, brightness: 0.5, energy: 0.3 };
+  if (samples.length < 64) return { pitch: 150, brightness: 0.5, energy: 0.3, hnr: 0.5 };
 
   // RMS energy
   let sum = 0;
   for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
   const energy = Math.min(1, Math.sqrt(sum / samples.length) * 6);
 
-  // Zero-crossing rate → proxy for spectral brightness (log-scaled, matches use-voice-analyzer)
+  // Zero-crossing rate → proxy for spectral brightness (linear 500–4000 Hz, matches voice-color mapping)
   let crossings = 0;
   for (let i = 1; i < samples.length; i++)
     if ((samples[i] >= 0) !== (samples[i - 1] >= 0)) crossings++;
   const zcr = (crossings / samples.length) * sr;
-  const brightness = Math.min(1, Math.max(0,
-    (Math.log(Math.max(zcr, 300)) - Math.log(300)) / (Math.log(8000) - Math.log(300))
-  ));
+  const brightness = Math.min(1, Math.max(0, (zcr - 500) / (4000 - 500)));
 
-  // Pitch via autocorrelation on up to 2048 samples
+  // Pitch via autocorrelation; clarity is the HNR proxy
   const pitchBuf = samples.slice(0, Math.min(2048, samples.length));
-  const detected = autoCorrelate(pitchBuf, sr);
-  const pitch = detected > 0 ? detected : 150;
+  const { hz, clarity } = autoCorrelateWithClarity(pitchBuf, sr);
+  const pitch = hz > 0 ? hz : 150;
+  const hnr = clarity;
 
-  return { pitch, brightness, energy };
+  return { pitch, brightness, energy, hnr };
 }
 
 export function segmentColor(buffer: AudioBuffer, startSec: number, endSec: number): string {
