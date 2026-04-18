@@ -6,7 +6,7 @@ import { VoiceBlob } from "@/components/VoiceBlob";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { describeVoice } from "@/lib/voice-color";
+import { describeVoice, groupColor } from "@/lib/voice-color";
 import { saveVoice } from "@/lib/voice-store";
 import { VoiceCard } from "@/components/VoiceCard";
 import { toast } from "sonner";
@@ -32,8 +32,9 @@ function RecordPage() {
   const desc = describeVoice(finalHex);
 
   const handleStop = () => {
-    setLocked(color);
-    stop();
+    const collected = stop();
+    const hex = collected.length > 1 ? groupColor(collected) : color;
+    setLocked(hex);
   };
 
   const handleReset = () => {
@@ -126,7 +127,10 @@ function RecordPage() {
               <div className="text-center space-y-1">
                 <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">{desc.name}</p>
                 <p className="font-mono text-sm">{desc.hex.toUpperCase()}</p>
-                <p className="font-serif text-xl mt-3 text-balance">“{desc.poem}”</p>
+                <p className="font-serif text-sm text-muted-foreground/70 mt-2 italic text-balance">
+                  This is your color - stable, personal, yours. However you speak, this is who you are.
+                </p>
+                <p className="font-serif text-xl mt-3 text-balance">"{desc.poem}"</p>
               </div>
               <div className="w-full glass rounded-2xl p-4 flex flex-col sm:flex-row gap-2">
                 <Input
