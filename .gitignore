@@ -20,6 +20,12 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Claude / superpowers session files
+docs/superpowers/
+.claude/
+memory/
+.omc/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -30,3 +36,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
