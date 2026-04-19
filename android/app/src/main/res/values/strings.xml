@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Seenesthesia</string>
+    <string name="title_activity_main">Seenesthesia</string>
+    <string name="package_name">com.seenesthesia.app</string>
+    <string name="custom_url_scheme">com.seenesthesia.app</string>
+</resources>
