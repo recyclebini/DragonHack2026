@@ -30,7 +30,7 @@ export function SiteHeader() {
                 className="size-8 shrink-0 rounded-lg object-cover ring-1 ring-border/60"
                 decoding="async"
               />
-              <span className="font-serif text-lg font-normal not-italic tracking-tight text-[oklch(0.84_0.02_280)]">
+              <span className="font-serif text-lg font-normal not-italic tracking-[0.06em] text-[oklch(0.84_0.02_280)]">
                 seenesthesia
               </span>
             </Link>
