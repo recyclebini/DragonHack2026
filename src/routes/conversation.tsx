@@ -144,7 +144,13 @@ function ConversationPage() {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [transcript]);
 
-  const emotion = applyEmotion(color, features);
+  // Expression Mode live color — same pipeline as transcript words so blob and text stay coherent
+  const identHex = identityColor(features);
+  const liveEmoLabel = applyEmotion(identHex, features).emotionLabel;
+  const liveScores = emotionLabelToScores(liveEmoLabel);
+  const [eL, ea, eb] = emotionToLab(liveScores);
+  const [nL, na, nb] = applyTimbreNudge(eL, ea, eb, identHex);
+  const liveExpressionColor = labToHex(nL, na, nb);
 
   const stopRecording = useCallback(() => {
     setRecording(false);
@@ -175,17 +181,25 @@ function ConversationPage() {
     const key = import.meta.env.VITE_DEEPGRAM_API_KEY as string | undefined;
     setDgError(key ? null : "no-key");
     setRecording(true);
-    startAnalyzer();
+
+    // Single mic stream shared by both the voice analyzer and Deepgram
+    let sharedStream: MediaStream;
+    try {
+      sharedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setRecording(false);
+      setDgError("error");
+      return;
+    }
+    dgStreamRef.current = sharedStream;
+    startAnalyzer(sharedStream);
 
     if (!key) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      dgStreamRef.current = stream;
-
       const ctx = new AudioContext();
       dgCtxRef.current = ctx;
-      const src = ctx.createMediaStreamSource(stream);
+      const src = ctx.createMediaStreamSource(sharedStream);
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const processor = ctx.createScriptProcessor(4096, 1, 1);
@@ -217,11 +231,11 @@ function ConversationPage() {
           const words = data.channel?.alternatives?.[0]?.words ?? [];
           if (!words.length) return;
 
-          const transcript = data.channel?.alternatives?.[0]?.transcript ?? words.map((w) => w.word).join(" ");
+          const transcriptText = data.channel?.alternatives?.[0]?.transcript ?? words.map((w) => w.word).join(" ");
           const currentIdentityHex = identityColor(featuresRef.current);
           const currentPrevColor = prevColorRef.current;
 
-          classifyEmotion(transcript)
+          classifyEmotion(transcriptText)
             .then((scores) => {
               const { words: colored, lastColor } = buildExpressionWords(words, scores, currentIdentityHex, currentPrevColor);
               prevColorRef.current = lastColor;
@@ -259,10 +273,10 @@ function ConversationPage() {
             onClick={recording ? stopRecording : startRecording}
             className="flex items-center gap-3 px-6 py-4 rounded-2xl text-base font-medium transition-all"
             style={{
-              background: recording ? "transparent" : emotion.color,
-              color: recording ? emotion.color : "#0d0d0d",
-              border: `2px solid ${emotion.color}`,
-              boxShadow: recording ? `0 0 30px ${emotion.color}44` : "none",
+              background: recording ? "transparent" : liveExpressionColor,
+              color: recording ? liveExpressionColor : "#0d0d0d",
+              border: `2px solid ${liveExpressionColor}`,
+              boxShadow: recording ? `0 0 30px ${liveExpressionColor}44` : "none",
             }}
           >
             {recording ? <Square className="size-5 fill-current" /> : <Mic className="size-5" />}
@@ -270,7 +284,7 @@ function ConversationPage() {
           </button>
 
           {(recording || state === "listening") && (
-            <VoiceBlob color={emotion.color} energy={features.energy} size={56} />
+            <VoiceBlob color={liveExpressionColor} energy={features.energy} size={56} />
           )}
 
           {transcript.length > 0 && (

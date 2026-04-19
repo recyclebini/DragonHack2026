@@ -38,7 +38,7 @@ export function useVoiceAnalyzer() {
     return collected;
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (externalStream?: MediaStream) => {
     samplesRef.current = [];
     recentColorsRef.current = [];
     if (sampleIntervalRef.current !== null) {
@@ -46,14 +46,15 @@ export function useVoiceAnalyzer() {
       sampleIntervalRef.current = null;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = externalStream ?? await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: true,
           echoCancellation: true,
-          autoGainControl: false, // keep raw energy for color mapping
+          autoGainControl: false,
         },
       });
-      streamRef.current = stream;
+      // Only take ownership (and stop tracks on cleanup) if we created the stream
+      if (!externalStream) streamRef.current = stream;
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx();
       ctxRef.current = ctx;
