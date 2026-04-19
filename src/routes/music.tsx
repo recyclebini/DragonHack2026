@@ -88,7 +88,40 @@ function MusicPage() {
       setSegments(cached.segments);
       setDuration(cached.duration);
       setAudioUrl(URL.createObjectURL(file));
-      setTranscriptWords(cached.transcriptWords);
+      if (cached.transcriptWords !== null) {
+        setTranscriptWords(cached.transcriptWords);
+        return;
+      }
+      // transcriptWords was null (previous failure) — retry transcription with cached segments
+      setTranscriptLoading(true);
+      transcribeFile(file)
+        .then((words: WordTimestamp[]) => {
+          let prevColor = cached.segments[0]?.color ?? "#7a5cff";
+          const colored = words.map((w) => {
+            const segIdx = Math.max(0, Math.min(Math.floor(w.start / CHUNK), cached.segments.length - 1));
+            const seg = cached.segments[segIdx];
+            const lower = w.word.toLowerCase().replace(/[^a-z]/g, "");
+            if (!seg || FUNCTION_WORDS.has(lower)) {
+              return { word: w.word, start: w.start, end: w.end, color: prevColor, fontSize: "1em", textTransform: "none" as const };
+            }
+            const emo = applyEmotion(seg.color, seg.features);
+            const labelMap: Record<string, string> = { Happy: "joy", Sad: "sadness", Intense: "anger", Nervous: "fear", Tender: "surprise", Neutral: "neutral" };
+            const emotionKey = labelMap[emo.emotionLabel] ?? "neutral";
+            const scores = { joy: 0, sadness: 0, anger: 0, fear: 0, disgust: 0, surprise: 0, neutral: 0, [emotionKey]: 1.0 };
+            const wordColor = smoothColor(prevColor, applyEmotionTint(seg.color, scores, 0.30));
+            prevColor = wordColor;
+            const typo = expressionTypography(emotionKey);
+            const fontSize = `${(0.8 + seg.features.energy * 0.55).toFixed(2)}em`;
+            return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
+          });
+          setTranscriptWords(colored);
+          setTranscriptLoading(false);
+          setCached<MusicCache>(MUSIC_CACHE_KEY, cacheKey, { segments: cached.segments, duration: cached.duration, transcriptWords: colored });
+        })
+        .catch((err: Error) => {
+          setTranscriptError(err.message.includes("VITE_DEEPGRAM_API_KEY") ? "no-key" : "error");
+          setTranscriptLoading(false);
+        });
       return;
     }
 
@@ -156,7 +189,9 @@ function MusicPage() {
               const wordColor = smoothColor(prevColor, applyEmotionTint(seg.color, scores, 0.30));
               prevColor = wordColor;
               const typo = expressionTypography(emotionKey);
-              return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize: typo.fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
+              // Energy drives font size (0.8em quiet → 1.35em loud); emotion sets uppercase
+              const fontSize = `${(0.8 + seg.features.energy * 0.55).toFixed(2)}em`;
+              return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
             });
             setTranscriptWords(colored);
             setTranscriptLoading(false);
@@ -165,8 +200,7 @@ function MusicPage() {
           .catch((err: Error) => {
             setTranscriptError(err.message.includes("VITE_DEEPGRAM_API_KEY") ? "no-key" : "error");
             setTranscriptLoading(false);
-            // Cache segments even without transcript so analysis isn't repeated
-            setCached<MusicCache>(MUSIC_CACHE_KEY, cacheKey, { segments: result, duration: decoded.duration, transcriptWords: null });
+            // Don't cache null transcript — keeps the retry path open on next upload
           });
       }
     };

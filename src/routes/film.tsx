@@ -153,7 +153,9 @@ function FilmPage() {
               const wordColor = smoothColor(prevColor, applyEmotionTint(spkBase, scores, 0.45));
               prevColor = wordColor;
               const typo = expressionTypography(emotionKey);
-              return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize: typo.fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
+              // Energy drives font size (0.8em quiet → 1.35em loud); emotion sets uppercase
+              const fontSize = `${(0.8 + seg.features.energy * 0.55).toFixed(2)}em`;
+              return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
             });
             setTranscriptWords(colored);
             setCached<FilmCache>(FILM_CACHE_KEY, cacheKey, { segments: result, duration: decoded.duration, transcriptWords: colored });

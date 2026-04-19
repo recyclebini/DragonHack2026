@@ -98,7 +98,7 @@ function RecordPage() {
             <div className="flex flex-col items-center gap-3">
               {state !== "listening" ? (
                 <Button
-                  onClick={start}
+                  onClick={() => start()}
                   size="lg"
                   className="rounded-full h-14 px-8 text-base font-medium"
                   style={{ background: finalHex, color: "#0d0d0d" }}

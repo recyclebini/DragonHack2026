@@ -53,7 +53,7 @@ export function useVoiceAnalyzer(options: UseVoiceAnalyzerOptions = {}) {
     return collected;
   }, []);
 
-  const start = async () => {
+  const start = async (externalStream?: MediaStream) => {
     samplesRef.current = [];
     recentColorsRef.current = [];
     if (sampleIntervalRef.current !== null) {
@@ -61,14 +61,15 @@ export function useVoiceAnalyzer(options: UseVoiceAnalyzerOptions = {}) {
       sampleIntervalRef.current = null;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = externalStream ?? await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: !loudnessOnly,
           echoCancellation: !loudnessOnly,
-          autoGainControl: false, // keep raw energy for color mapping
+          autoGainControl: false,
         },
       });
-      streamRef.current = stream;
+      // Only take ownership (and stop tracks on cleanup) if we created the stream
+      if (!externalStream) streamRef.current = stream;
       const Ctx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -95,14 +96,7 @@ export function useVoiceAnalyzer(options: UseVoiceAnalyzerOptions = {}) {
       setState("listening");
       sampleIntervalRef.current = window.setInterval(() => {
         const f = smoothRef.current;
-        samplesRef.current.push(
-          featuresToColor({
-            pitch: f.pitch,
-            brightness: f.brightness,
-            energy: f.energy,
-            hnr: f.hnr,
-          }),
-        );
+        samplesRef.current.push({ pitch: f.pitch, brightness: f.brightness, energy: f.energy, hnr: f.hnr });
       }, 200);
       tick();
     } catch (e) {
