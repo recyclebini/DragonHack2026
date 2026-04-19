@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { featuresToColor, groupColor, type VoiceFeatures } from "@/lib/voice-color";
 
+
 export type AnalyzerState = "idle" | "listening" | "denied" | "error";
 
 export function useVoiceAnalyzer() {
@@ -13,11 +14,11 @@ export function useVoiceAnalyzer() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const smoothRef = useRef({ pitch: 150, brightness: 0.5, energy: 0, hnr: 0.5 });
-  const samplesRef = useRef<string[]>([]);
+  const samplesRef = useRef<VoiceFeatures[]>([]);
   const recentColorsRef = useRef<string[]>([]);
   const sampleIntervalRef = useRef<number | null>(null);
 
-  const stop = useCallback((): string[] => {
+  const stop = useCallback((): VoiceFeatures[] => {
     if (sampleIntervalRef.current !== null) {
       clearInterval(sampleIntervalRef.current);
       sampleIntervalRef.current = null;
@@ -74,9 +75,7 @@ export function useVoiceAnalyzer() {
       setState("listening");
       sampleIntervalRef.current = window.setInterval(() => {
         const f = smoothRef.current;
-        samplesRef.current.push(
-          featuresToColor({ pitch: f.pitch, brightness: f.brightness, energy: f.energy, hnr: f.hnr })
-        );
+        samplesRef.current.push({ pitch: f.pitch, brightness: f.brightness, energy: f.energy, hnr: f.hnr });
       }, 200);
       tick();
     } catch (e) {

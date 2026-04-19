@@ -13,7 +13,7 @@ export type VoiceColor = {
   poem: string;
 };
 
-/** Idle / default voice color — matches `useVoiceAnalyzer` initial state and hero “a color” before input. */
+/** Idle / default voice color — matches `useVoiceAnalyzer` initial state and hero "a color" before input. */
 export const DEFAULT_VOICE_HEX = "#7a5cff";
 
 // CIELAB mapping — mirrors the Python script's Mapping A:
@@ -27,6 +27,118 @@ export function featuresToColor(f: VoiceFeatures): string {
   const B = -60 + f.brightness * 120;
   return chroma.lab(L, A, B).hex();
 }
+
+// ── Identity Mode ─────────────────────────────────────────────────────────────
+// Pitch (F0) → hue: the primary discriminator between people. Log scale 80-400Hz → 0-300°.
+//   Bass (80-150Hz) = reds/oranges, tenor (150-250Hz) = greens, soprano (250-400Hz) = blues.
+// Spectral centroid → lightness: calibrated to the voice range (800-2500Hz).
+//   brightness = (centroid-500)/3500, so voice sits in 0.086-0.571 → stretched to 35%-65%.
+export function identityColor(features: VoiceFeatures): string {
+  const p = Math.max(80, Math.min(400, features.pitch || 150));
+  const hue = (Math.log(p) - Math.log(80)) / (Math.log(400) - Math.log(80)) * 300;
+  const brightnessNorm = Math.max(0, Math.min(1, (features.brightness - 0.086) / 0.485));
+  const lightness = 0.35 + brightnessNorm * 0.30;
+  return chroma.hsl(hue, 0.70, lightness).hex();
+}
+
+// ── Expression Mode ───────────────────────────────────────────────────────────
+// LAB anchors ported from voice_emotion_color.py
+const EMOTION_LAB: Record<string, [number, number, number]> = {
+  joy:      [78,  35,  45],
+  sadness:  [35, -20, -40],
+  anger:    [45,  65,  20],
+  fear:     [30,  20, -45],
+  disgust:  [45, -35,  15],
+  surprise: [70,  25,  30],
+  neutral:  [55,   0,   0],
+};
+
+export function emotionToLab(scores: Record<string, number>): [number, number, number] {
+  let L = 0, a = 0, b = 0;
+  for (const [emotion, weight] of Object.entries(scores)) {
+    const anchor = EMOTION_LAB[emotion] ?? EMOTION_LAB.neutral;
+    L += anchor[0] * weight;
+    a += anchor[1] * weight;
+    b += anchor[2] * weight;
+  }
+  return [L, a, b];
+}
+
+// Nudges the emotion LAB color toward the person's identity timbre (strength=0.25 keeps emotion dominant).
+export function applyTimbreNudge(
+  L: number, a: number, b: number,
+  identityHex: string,
+  strength = 0.25
+): [number, number, number] {
+  const [ih, , il] = chroma(identityHex).hsl();
+  const safeH = isNaN(ih) ? 0 : ih;
+  const safeL = isNaN(il) ? 0.5 : il;
+  const identityLab = chroma.hsl(safeH, 0.65, safeL).lab();
+  return [
+    L + (identityLab[0] - 55) * strength,
+    a + identityLab[1] * strength,
+    b + identityLab[2] * strength,
+  ];
+}
+
+export function labToHex(L: number, a: number, b: number): string {
+  return chroma.lab(
+    Math.max(20, Math.min(90, L)),
+    Math.max(-80, Math.min(80, a)),
+    Math.max(-80, Math.min(80, b))
+  ).hex();
+}
+
+// Tints an acoustic segment color toward an emotion anchor.
+// Keeps the transcript visually coherent with the color ribbon while adding emotional inflection.
+export function applyEmotionTint(
+  segHex: string,
+  scores: Record<string, number>,
+  strength = 0.30
+): string {
+  const [sL, sa, sb] = chroma(segHex).lab();
+  const [eL, ea, eb] = emotionToLab(scores);
+  return labToHex(
+    sL + strength * (eL - sL),
+    sa + strength * (ea - sa),
+    sb + strength * (eb - sb),
+  );
+}
+
+// Exponential moving average in LAB space — ported from Python voice_emotion_color.py
+export function smoothColor(current: string, target: string, alpha = 0.35): string {
+  const [cL, ca, cb] = chroma(current).lab();
+  const [tL, ta, tb] = chroma(target).lab();
+  return labToHex(
+    cL + alpha * (tL - cL),
+    ca + alpha * (ta - ca),
+    cb + alpha * (tb - cb),
+  );
+}
+
+// ── Typography — Expression Mode only ────────────────────────────────────────
+const EMOTION_TYPOGRAPHY: Record<string, { fontSize: string; textTransform: string }> = {
+  joy:      { fontSize: '1.05em', textTransform: 'none' },
+  sadness:  { fontSize: '0.92em', textTransform: 'none' },
+  anger:    { fontSize: '1.1em',  textTransform: 'uppercase' },
+  fear:     { fontSize: '0.88em', textTransform: 'none' },
+  disgust:  { fontSize: '1em',    textTransform: 'none' },
+  surprise: { fontSize: '1.08em', textTransform: 'none' },
+  neutral:  { fontSize: '1em',    textTransform: 'none' },
+};
+
+export function expressionTypography(emotion: string): { fontSize: string; textTransform: string } {
+  return EMOTION_TYPOGRAPHY[emotion] ?? EMOTION_TYPOGRAPHY.neutral;
+}
+
+export const FUNCTION_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'is', 'was', 'are', 'were', 'be', 'have', 'has', 'do',
+  'does', 'did', 'will', 'would', 'could', 'should', 'i', 'you', 'he',
+  'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my',
+  'your', 'his', 'its', 'our', 'their', 'this', 'that', 'not', 'so',
+  'if', 'as', 'by',
+]);
 
 const HUE_NAMES: { range: [number, number]; words: string[] }[] = [
   { range: [0, 20], words: ["Ember", "Crimson", "Garnet", "Rust"] },

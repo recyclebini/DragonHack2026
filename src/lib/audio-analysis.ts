@@ -1,5 +1,74 @@
 import { featuresToColor, type VoiceFeatures } from "./voice-color";
 
+// ── Radix-2 Cooley-Tukey FFT (in-place) ──────────────────────────────────────
+function fft(re: Float32Array, im: Float32Array): void {
+  const N = re.length;
+  // Bit-reversal permutation
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  // Butterfly passes
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = (2 * Math.PI) / len;
+    const wRe = Math.cos(ang);
+    const wIm = -Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let uRe = 1, uIm = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const lo = i + j, hi = lo + half;
+        const vRe = re[hi] * uRe - im[hi] * uIm;
+        const vIm = re[hi] * uIm + im[hi] * uRe;
+        re[hi] = re[lo] - vRe;
+        im[hi] = im[lo] - vIm;
+        re[lo] += vRe;
+        im[lo] += vIm;
+        const nr = uRe * wRe - uIm * wIm;
+        uIm = uRe * wIm + uIm * wRe;
+        uRe = nr;
+      }
+    }
+  }
+}
+
+// FFT-based spectral centroid — replaces ZCR, works correctly for music
+function spectralCentroid(samples: Float32Array, sampleRate: number): number {
+  // Largest power-of-2 frame that fits the samples, capped at 2048
+  let N = 1;
+  while (N <= samples.length && N < 2048) N <<= 1;
+  if (N > samples.length) N >>= 1;
+  if (N < 4) return 1000;
+
+  const re = new Float32Array(N);
+  const im = new Float32Array(N);
+
+  // Hann window
+  for (let i = 0; i < N; i++) {
+    const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1)));
+    re[i] = samples[i] * w;
+  }
+
+  fft(re, im);
+
+  // Weighted centroid over magnitude spectrum (positive frequencies only)
+  let num = 0, den = 0;
+  for (let i = 0; i < N >> 1; i++) {
+    const mag = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    const hz = (i * sampleRate) / N;
+    num += hz * mag;
+    den += mag;
+  }
+
+  return den > 0 ? num / den : 1000;
+}
+
+// ── Autocorrelation pitch + HNR ───────────────────────────────────────────────
 function autoCorrelateWithClarity(buf: Float32Array, sampleRate: number): { hz: number; clarity: number } {
   const none = { hz: -1, clarity: 0 };
   const SIZE = buf.length;
@@ -35,12 +104,11 @@ function autoCorrelateWithClarity(buf: Float32Array, sampleRate: number): { hz: 
   return { hz, clarity };
 }
 
-// Kept for any external callers that only need hz
 export function autoCorrelate(buf: Float32Array, sampleRate: number): number {
   return autoCorrelateWithClarity(buf, sampleRate).hz;
 }
 
-// Analyze a segment of an AudioBuffer → VoiceFeatures → hex color
+// ── Main segment analyzer ─────────────────────────────────────────────────────
 export function analyzeSegment(buffer: AudioBuffer, startSec: number, endSec: number): VoiceFeatures {
   const sr = buffer.sampleRate;
   const s = Math.floor(startSec * sr);
@@ -54,14 +122,11 @@ export function analyzeSegment(buffer: AudioBuffer, startSec: number, endSec: nu
   for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
   const energy = Math.min(1, Math.sqrt(sum / samples.length) * 6);
 
-  // Zero-crossing rate → proxy for spectral brightness (linear 500–4000 Hz, matches voice-color mapping)
-  let crossings = 0;
-  for (let i = 1; i < samples.length; i++)
-    if ((samples[i] >= 0) !== (samples[i - 1] >= 0)) crossings++;
-  const zcr = (crossings / samples.length) * sr;
-  const brightness = Math.min(1, Math.max(0, (zcr - 500) / (4000 - 500)));
+  // FFT spectral centroid → brightness (500–4000 Hz range, matches live analyzer)
+  const centroidHz = spectralCentroid(samples, sr);
+  const brightness = Math.min(1, Math.max(0, (centroidHz - 500) / (4000 - 500)));
 
-  // Pitch via autocorrelation; clarity is the HNR proxy
+  // Pitch + HNR via autocorrelation
   const pitchBuf = samples.slice(0, Math.min(2048, samples.length));
   const { hz, clarity } = autoCorrelateWithClarity(pitchBuf, sr);
   const pitch = hz > 0 ? hz : 150;

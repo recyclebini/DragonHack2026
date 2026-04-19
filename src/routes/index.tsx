@@ -6,7 +6,7 @@ import { VoiceBlob } from "@/components/VoiceBlob";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { describeVoice, groupColor } from "@/lib/voice-color";
+import { describeVoice, identityColor } from "@/lib/voice-color";
 import { saveVoice } from "@/lib/voice-store";
 import { VoiceCard } from "@/components/VoiceCard";
 import { toast } from "sonner";
@@ -29,13 +29,14 @@ function RecordPage() {
   const [locking, setLocking] = useState(false);
   const [name, setName] = useState("");
 
-  const finalHex = locked ?? color;
+  // During recording show identityColor so the live display matches what gets locked.
+  const liveHex = state === "listening" ? identityColor(features) : color;
+  const finalHex = locked ?? liveHex;
   const desc = describeVoice(finalHex);
 
   const handleStop = () => {
-    const collected = stop();
-    const hex = collected.length > 1 ? groupColor(collected) : color;
-    setLocked(hex);
+    stop();
+    setLocked(liveHex);
     setLocking(true);
     setTimeout(() => setLocking(false), 400);
   };
