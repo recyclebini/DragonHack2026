@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VisualizeRouteImport } from './routes/visualize'
 import { Route as MusicRouteImport } from './routes/music'
 import { Route as MapRouteImport } from './routes/map'
+import { Route as FilmRouteImport } from './routes/film'
 import { Route as ConversationRouteImport } from './routes/conversation'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const MapRoute = MapRouteImport.update({
   path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FilmRoute = FilmRouteImport.update({
+  id: '/film',
+  path: '/film',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConversationRoute = ConversationRouteImport.update({
   id: '/conversation',
   path: '/conversation',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/conversation': typeof ConversationRoute
+  '/film': typeof FilmRoute
   '/map': typeof MapRoute
   '/music': typeof MusicRoute
   '/visualize': typeof VisualizeRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/conversation': typeof ConversationRoute
+  '/film': typeof FilmRoute
   '/map': typeof MapRoute
   '/music': typeof MusicRoute
   '/visualize': typeof VisualizeRoute
@@ -59,21 +67,30 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/conversation': typeof ConversationRoute
+  '/film': typeof FilmRoute
   '/map': typeof MapRoute
   '/music': typeof MusicRoute
   '/visualize': typeof VisualizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/conversation' | '/map' | '/music' | '/visualize'
+  fullPaths: '/' | '/conversation' | '/film' | '/map' | '/music' | '/visualize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/conversation' | '/map' | '/music' | '/visualize'
-  id: '__root__' | '/' | '/conversation' | '/map' | '/music' | '/visualize'
+  to: '/' | '/conversation' | '/film' | '/map' | '/music' | '/visualize'
+  id:
+    | '__root__'
+    | '/'
+    | '/conversation'
+    | '/film'
+    | '/map'
+    | '/music'
+    | '/visualize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConversationRoute: typeof ConversationRoute
+  FilmRoute: typeof FilmRoute
   MapRoute: typeof MapRoute
   MusicRoute: typeof MusicRoute
   VisualizeRoute: typeof VisualizeRoute
@@ -102,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/film': {
+      id: '/film'
+      path: '/film'
+      fullPath: '/film'
+      preLoaderRoute: typeof FilmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/conversation': {
       id: '/conversation'
       path: '/conversation'
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConversationRoute: ConversationRoute,
+  FilmRoute: FilmRoute,
   MapRoute: MapRoute,
   MusicRoute: MusicRoute,
   VisualizeRoute: VisualizeRoute,

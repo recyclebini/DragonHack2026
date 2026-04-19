@@ -1,256 +1,240 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import chroma from "chroma-js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Mic, Square, Trash2 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { VoiceBlob } from "@/components/VoiceBlob";
 import { useVoiceAnalyzer } from "@/hooks/use-voice-analyzer";
-import { applyEmotion, type EmotionResult } from "@/lib/voice-color";
-import { getVoices, type SavedVoice } from "@/lib/voice-store";
+import { applyEmotion } from "@/lib/voice-color";
+import type { VoiceFeatures } from "@/lib/voice-color";
 
 export const Route = createFileRoute("/conversation")({
   component: ConversationPage,
 });
 
-type Slot = { name: string; identityHex: string | null };
-type Entry = {
-  slotIndex: number;
-  speakerName: string;
-  speakerColor: string;
-  text: string;
-  emotion: EmotionResult;
+type TranscriptWord = {
+  word: string;
+  color: string;
+  fontStyle: "normal" | "italic";
+  fontWeight: number;
+  textTransform: "none" | "uppercase";
 };
 
-const AUTO_HUES = [30, 120, 210, 300];
+const DG_RATE = 16000;
 
-function slotColor(slot: Slot, index: number): string {
-  return slot.identityHex ?? chroma.hsl(AUTO_HUES[index], 0.6, 0.55).hex();
+function downsample(buffer: Float32Array, fromRate: number, toRate: number): Int16Array {
+  if (fromRate === toRate) {
+    const out = new Int16Array(buffer.length);
+    for (let i = 0; i < buffer.length; i++) {
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(buffer[i] * 32767)));
+    }
+    return out;
+  }
+  const ratio = fromRate / toRate;
+  const outLen = Math.round(buffer.length / ratio);
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const srcIdx = Math.min(Math.round(i * ratio), buffer.length - 1);
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(buffer[srcIdx] * 32767)));
+  }
+  return out;
 }
 
 function ConversationPage() {
-  const [slots, setSlots] = useState<Slot[]>([
-    { name: "", identityHex: null },
-    { name: "", identityHex: null },
-    { name: "", identityHex: null },
-    { name: "", identityHex: null },
-  ]);
-  const [activeSlot, setActiveSlot] = useState(0);
-  const [text, setText] = useState("");
-  const [transcript, setTranscript] = useState<Entry[]>([]);
-  const [savedVoices, setSavedVoices] = useState<SavedVoice[]>([]);
-  const [pickerForSlot, setPickerForSlot] = useState<number | null>(null);
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const { state, start, stop, features } = useVoiceAnalyzer();
+  const [transcript, setTranscript] = useState<TranscriptWord[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [dgError, setDgError] = useState<string | null>(null);
 
-  useEffect(() => { getVoices().then(setSavedVoices).catch(() => {}); }, []);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const { state, start: startAnalyzer, stop: stopAnalyzer, color, features } = useVoiceAnalyzer();
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const dgStreamRef = useRef<MediaStream | null>(null);
+  const dgCtxRef = useRef<AudioContext | null>(null);
+  const dgProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const colorRef = useRef<string>(color);
+  const featuresRef = useRef<VoiceFeatures>(features);
+
+  useEffect(() => { colorRef.current = color; }, [color]);
+  useEffect(() => { featuresRef.current = features; }, [features]);
 
   useEffect(() => {
     if (transcriptRef.current)
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [transcript]);
 
-  const activeColor = slotColor(slots[activeSlot], activeSlot);
-  const emotion = applyEmotion(activeColor, features);
+  const emotion = applyEmotion(color, features);
 
-  const handleAddLine = () => {
-    if (!text.trim()) return;
-    setTranscript((prev) => [
-      ...prev,
-      {
-        slotIndex: activeSlot,
-        speakerName: slots[activeSlot].name || `Speaker ${activeSlot + 1}`,
-        speakerColor: activeColor,
-        text: text.trim(),
-        emotion: applyEmotion(activeColor, features),
-      },
-    ]);
-    setText("");
-  };
+  const stopRecording = useCallback(() => {
+    setRecording(false);
+    stopAnalyzer();
 
-  const assignVoice = (slotIdx: number, voice: SavedVoice) => {
-    setSlots((prev) =>
-      prev.map((s, i) => i === slotIdx ? { name: voice.name, identityHex: voice.hex } : s)
-    );
-    setPickerForSlot(null);
+    if (dgProcessorRef.current) {
+      dgProcessorRef.current.onaudioprocess = null;
+      dgProcessorRef.current.disconnect();
+      dgProcessorRef.current = null;
+    }
+
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ type: "CloseStream" })); } catch {}
+      setTimeout(() => { ws.close(); }, 500);
+    }
+    wsRef.current = null;
+
+    dgCtxRef.current?.close().catch(() => {});
+    dgCtxRef.current = null;
+    dgStreamRef.current?.getTracks().forEach((t) => t.stop());
+    dgStreamRef.current = null;
+  }, [stopAnalyzer]);
+
+  useEffect(() => () => { stopRecording(); }, [stopRecording]);
+
+  const startRecording = async () => {
+    const key = import.meta.env.VITE_DEEPGRAM_API_KEY as string | undefined;
+    setDgError(key ? null : "no-key");
+    setRecording(true);
+    startAnalyzer();
+
+    if (!key) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      dgStreamRef.current = stream;
+
+      const ctx = new AudioContext();
+      dgCtxRef.current = ctx;
+      const src = ctx.createMediaStreamSource(stream);
+
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      dgProcessorRef.current = processor;
+      src.connect(processor);
+      processor.connect(ctx.destination);
+
+      const ws = new WebSocket(
+        "wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&sample_rate=16000&channels=1&punctuate=true&words=true",
+        ["token", key]
+      );
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        processor.onaudioprocess = (e: AudioProcessingEvent) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const pcm = downsample(e.inputBuffer.getChannelData(0), ctx.sampleRate, DG_RATE);
+          ws.send(pcm.buffer);
+        };
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data as string) as {
+            is_final?: boolean;
+            channel?: { alternatives?: Array<{ words?: Array<{ word: string }> }> };
+          };
+          if (!data.is_final) return;
+          const words = data.channel?.alternatives?.[0]?.words ?? [];
+          if (!words.length) return;
+          const emo = applyEmotion(colorRef.current, featuresRef.current);
+          setTranscript((prev) => [
+            ...prev,
+            ...words.map((w) => ({
+              word: w.word,
+              color: emo.color,
+              fontStyle: emo.fontStyle,
+              fontWeight: emo.fontWeight,
+              textTransform: emo.textTransform,
+            })),
+          ]);
+        } catch {}
+      };
+
+      ws.onerror = () => setDgError("error");
+    } catch {
+      setDgError("error");
+    }
   };
 
   return (
     <div className="min-h-screen">
       <SiteHeader />
-      <main className="mx-auto max-w-5xl px-4 pt-6 pb-32 md:pb-8">
-        <h1 className="font-display text-3xl font-semibold mb-2">Conversation</h1>
-        <p className="text-muted-foreground text-sm mb-6">
-          See who is speaking and how they feel — in color.
+      <main className="mx-auto max-w-6xl px-5 pt-6 pb-32 md:pb-8">
+        <h1 className="font-display text-4xl font-semibold">Conversation</h1>
+        <p className="text-muted-foreground mt-1 mb-8">
+          Ask someone to speak to you. Their words appear in the color of their emotion — so you feel not just what they say, but how they mean it.
         </p>
 
-        {/* Speaker slots */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {slots.map((slot, i) => {
-            const c = slotColor(slot, i);
-            return (
-              <div key={i} className="glass rounded-2xl p-3 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: c }} />
-                  <input
-                    value={slot.name}
-                    onChange={(e) =>
-                      setSlots((prev) =>
-                        prev.map((s, idx) => idx === i ? { ...s, name: e.target.value } : s)
-                      )
-                    }
-                    placeholder={`Speaker ${i + 1}`}
-                    className="bg-transparent text-sm flex-1 min-w-0 outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
-                <button
-                  onClick={() => setPickerForSlot(pickerForSlot === i ? null : i)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition text-left"
-                >
-                  {slot.identityHex ? "Change voice ↓" : "Pick from map →"}
-                </button>
-                {pickerForSlot === i && (
-                  <div className="mt-1 space-y-1 max-h-32 overflow-y-auto">
-                    {savedVoices.length === 0 ? (
-                      <p className="text-[10px] text-muted-foreground">No saved voices yet.</p>
-                    ) : (
-                      savedVoices.map((v) => (
-                        <button
-                          key={v.id}
-                          onClick={() => assignVoice(i, v)}
-                          className="flex items-center gap-2 w-full text-left text-xs hover:bg-white/10 rounded px-2 py-1"
-                        >
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: v.hex }} />
-                          {v.name}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Active speaker + mic toggle */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {slots.map((slot, i) => {
-            const c = slotColor(slot, i);
-            const isActive = activeSlot === i;
-            return (
-              <button
-                key={i}
-                onClick={() => setActiveSlot(i)}
-                className="px-4 py-2 rounded-full text-sm font-medium transition-all"
-                style={{
-                  background: isActive ? c : `${c}22`,
-                  color: isActive ? "#0d0d0d" : c,
-                  boxShadow: isActive ? `0 0 20px ${c}55` : "none",
-                  border: `1.5px solid ${c}`,
-                }}
-              >
-                {slot.name || `Speaker ${i + 1}`}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Live emotion indicator */}
-        <div
-          className="mb-4 px-4 py-2 glass rounded-xl flex items-center gap-3"
-          style={{ borderLeft: `3px solid ${emotion.color}` }}
-        >
-          <span
-            className="text-sm"
+        {/* Record button + live blob */}
+        <div className="flex items-center gap-4 mb-4 flex-wrap">
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            className="flex items-center gap-3 px-6 py-4 rounded-2xl text-base font-medium transition-all"
             style={{
-              color: emotion.color,
-              fontStyle: emotion.fontStyle,
-              fontWeight: emotion.fontWeight,
-              textTransform: emotion.textTransform,
+              background: recording ? "transparent" : emotion.color,
+              color: recording ? emotion.color : "#0d0d0d",
+              border: `2px solid ${emotion.color}`,
+              boxShadow: recording ? `0 0 30px ${emotion.color}44` : "none",
             }}
           >
-            {emotion.emotionLabel}
-          </span>
-          <span className="text-muted-foreground text-xs">
-            {state === "listening" ? "Live mic active" : "Mic off"}
-          </span>
-          <button
-            onClick={() => state === "listening" ? stop() : start()}
-            className="ml-auto text-xs px-3 py-1 rounded-full glass hover:bg-white/10 transition"
-          >
-            {state === "listening" ? "Stop mic" : "Start mic"}
+            {recording ? <Square className="size-5 fill-current" /> : <Mic className="size-5" />}
+            {recording ? "Stop" : "Start listening"}
           </button>
+
+          {(recording || state === "listening") && (
+            <VoiceBlob color={emotion.color} energy={features.energy} size={56} />
+          )}
+
+          {transcript.length > 0 && (
+            <button
+              onClick={() => setTranscript([])}
+              className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition"
+            >
+              <Trash2 className="size-4" />
+              Clear
+            </button>
+          )}
         </div>
+
+        {state === "denied" && (
+          <p className="text-sm text-destructive mb-3">Microphone access was denied.</p>
+        )}
+
+        {dgError === "no-key" && (
+          <div className="mb-4 px-4 py-3 glass rounded-xl text-sm text-muted-foreground">
+            Add a <code className="font-mono text-xs">VITE_DEEPGRAM_API_KEY</code> to enable word-level transcript coloring.
+          </div>
+        )}
+        {dgError === "error" && (
+          <div className="mb-4 px-4 py-3 glass rounded-xl text-sm text-destructive">
+            Could not connect to Deepgram. Check your API key and network connection.
+          </div>
+        )}
 
         {/* Transcript */}
         <div
           ref={transcriptRef}
-          className="glass rounded-2xl p-4 min-h-[180px] max-h-[40vh] overflow-y-auto mb-4 space-y-3"
+          className="glass rounded-2xl p-6 min-h-[240px] max-h-[60vh] overflow-y-auto"
         >
-          {transcript.length === 0 && (
-            <p className="text-muted-foreground text-sm text-center mt-8">
-              Transcript will appear here.
+          {transcript.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center mt-10">
+              {recording ? "Listening… ask them to speak." : "Tap Start to begin listening."}
+            </p>
+          ) : (
+            <p className="leading-relaxed text-lg">
+              {transcript.map((w, i) => (
+                <span
+                  key={i}
+                  style={{
+                    color: w.color,
+                    fontStyle: w.fontStyle,
+                    fontWeight: w.fontWeight,
+                    textTransform: w.textTransform,
+                  }}
+                >
+                  {w.word}{" "}
+                </span>
+              ))}
             </p>
           )}
-          {transcript.map((entry, idx) => (
-            <div key={idx} className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ background: `${entry.speakerColor}33`, color: entry.speakerColor }}
-                >
-                  {entry.speakerName}
-                </span>
-                <span
-                  className="text-[10px] px-2 py-0.5 rounded-full glass"
-                  style={{ color: entry.emotion.color }}
-                >
-                  {entry.emotion.emotionLabel}
-                </span>
-              </div>
-              <p
-                className="text-base pl-1"
-                style={{
-                  color: entry.emotion.color,
-                  fontStyle: entry.emotion.fontStyle,
-                  fontWeight: entry.emotion.fontWeight,
-                  textTransform: entry.emotion.textTransform,
-                }}
-              >
-                {entry.text}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Input row */}
-        <div className="flex gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddLine()}
-            placeholder="Type what's being said…"
-            className="flex-1 bg-transparent glass rounded-xl px-4 py-3 text-sm outline-none placeholder:text-muted-foreground border border-white/10"
-          />
-          <button
-            onClick={handleAddLine}
-            disabled={!text.trim()}
-            className="px-5 py-3 rounded-xl text-sm font-medium transition-all disabled:opacity-40"
-            style={{ background: activeColor, color: "#0d0d0d" }}
-          >
-            Add line
-          </button>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-5 flex flex-wrap gap-3 items-center">
-          <span className="text-xs text-muted-foreground">Speakers:</span>
-          {slots.map((slot, i) => {
-            const c = slotColor(slot, i);
-            return (
-              <div key={i} className="flex items-center gap-1.5 text-xs">
-                <span className="w-3 h-3 rounded-full" style={{ background: c }} />
-                {slot.name || `Speaker ${i + 1}`}
-              </div>
-            );
-          })}
         </div>
       </main>
     </div>

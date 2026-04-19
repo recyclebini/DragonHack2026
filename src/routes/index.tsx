@@ -26,6 +26,7 @@ export const Route = createFileRoute("/")({
 function RecordPage() {
   const { state, start, stop, color, features } = useVoiceAnalyzer();
   const [locked, setLocked] = useState<string | null>(null);
+  const [locking, setLocking] = useState(false);
   const [name, setName] = useState("");
 
   const finalHex = locked ?? color;
@@ -35,6 +36,8 @@ function RecordPage() {
     const collected = stop();
     const hex = collected.length > 1 ? groupColor(collected) : color;
     setLocked(hex);
+    setLocking(true);
+    setTimeout(() => setLocking(false), 400);
   };
 
   const handleReset = () => {
@@ -56,33 +59,38 @@ function RecordPage() {
   return (
     <div className="min-h-screen">
       <SiteHeader />
-      <main className="mx-auto max-w-5xl px-5 pt-8 pb-24">
+      <main className="mx-auto max-w-5xl px-5 pt-8 pb-36 md:pb-8">
         <section className="text-center max-w-2xl mx-auto animate-fade-up">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground mb-4">
-            For those who feel music in color
+            See the voices of the people you love
           </p>
           <h1 className="font-display text-5xl md:text-6xl font-semibold leading-[1.05] text-balance">
-            Your voice has{" "}
+            Every voice has{" "}
             <span className="font-serif italic font-normal" style={{ color: finalHex }}>
               a color
             </span>
             .
           </h1>
           <p className="mt-5 text-muted-foreground text-balance">
-            Tap the mic and speak. Pitch becomes brightness, timbre becomes hue. What you make, only you could make.
+            Ask someone to speak, then scan their voice. Pitch becomes brightness, warmth becomes hue. A color only they could make.
           </p>
         </section>
 
         <section className="mt-12 flex flex-col items-center gap-8">
           <div className="relative">
             <div
-              className={`absolute inset-0 rounded-full ${state === "listening" ? "animate-ring-pulse" : ""}`}
+              className={`absolute rounded-full ${state === "listening" ? "animate-ring-pulse" : ""}`}
               style={{
-                width: 380, height: 380, left: -30, top: -30,
+                inset: "-10%",
                 background: `radial-gradient(circle, ${finalHex}33 0%, transparent 60%)`,
               }}
             />
-            <VoiceBlob color={finalHex} energy={locked ? 0.2 : features.energy} size={320} />
+            <div
+              className="transition-transform duration-300 ease-out"
+              style={{ transform: locking ? "scale(1.15)" : "scale(1)" }}
+            >
+              <VoiceBlob color={finalHex} energy={locked ? 0.2 : features.energy} size={320} />
+            </div>
           </div>
 
           {!locked && (
@@ -95,7 +103,7 @@ function RecordPage() {
                   style={{ background: finalHex, color: "#0d0d0d" }}
                 >
                   <Mic className="size-5" />
-                  Start listening
+                  Scan their voice
                 </Button>
               ) : (
                 <Button
@@ -105,7 +113,7 @@ function RecordPage() {
                   className="rounded-full h-14 px-8 text-base font-medium glass"
                 >
                   <Square className="size-4 fill-current" />
-                  Lock my color
+                  Capture this color
                 </Button>
               )}
               {state === "denied" && (
@@ -128,7 +136,7 @@ function RecordPage() {
                 <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">{desc.name}</p>
                 <p className="font-mono text-sm">{desc.hex.toUpperCase()}</p>
                 <p className="font-serif text-sm text-muted-foreground/70 mt-2 italic text-balance">
-                  This is your color — stable, personal, yours. However you speak, this is who you are.
+                  This is their color — the sound of who they are, translated into light.
                 </p>
                 <p className="font-serif text-xl mt-3 text-balance">"{desc.poem}"</p>
               </div>
@@ -136,12 +144,12 @@ function RecordPage() {
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
+                  placeholder="Their name"
                   className="bg-transparent border-white/10"
                 />
                 <Button onClick={handleSave} className="rounded-xl" style={{ background: finalHex, color: "#0d0d0d" }}>
                   <Save className="size-4" />
-                  Save my voice
+                  Save to My People
                 </Button>
               </div>
               <button onClick={handleReset} className="text-xs text-muted-foreground hover:text-foreground transition">
@@ -155,12 +163,12 @@ function RecordPage() {
           <section className="mt-16 grid md:grid-cols-2 gap-10 items-center max-w-4xl mx-auto">
             <VoiceCard voice={{ name: name || "Anonymous", hex: desc.hex, colorName: desc.name, poem: desc.poem }} />
             <div className="space-y-4">
-              <h2 className="font-display text-2xl font-semibold">Share your color.</h2>
+              <h2 className="font-display text-2xl font-semibold">Add them to your world.</h2>
               <p className="text-muted-foreground">
-                Download the card or save your voice to the shared map and discover whose voice harmonizes with yours.
+                Save this voice to your map and build a constellation of everyone who matters to you — each one a unique color, all yours to keep.
               </p>
               <Link to="/map" className="inline-flex items-center gap-2 text-sm font-medium hover:underline">
-                Visit the Voice Map <ArrowRight className="size-4" />
+                Go to My People <ArrowRight className="size-4" />
               </Link>
             </div>
           </section>

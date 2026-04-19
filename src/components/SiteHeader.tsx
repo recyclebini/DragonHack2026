@@ -1,22 +1,16 @@
-import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { LogIn, LogOut, User, Mic, Map, MessageSquare, Eye, Music } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
-import { AuthModal } from "@/components/AuthModal";
-import { Button } from "@/components/ui/button";
+import { Mic, Map, MessageSquare, Eye, Music, Clapperboard } from "lucide-react";
 
 const links = [
-  { to: "/", label: "Record", mobileLabel: "Record", icon: Mic },
-  { to: "/map", label: "Voice Map", mobileLabel: "Map", icon: Map },
+  { to: "/", label: "Scan a Voice", mobileLabel: "Scan", icon: Mic },
+  { to: "/map", label: "My People", mobileLabel: "People", icon: Map },
   { to: "/conversation", label: "Conversation", mobileLabel: "Chat", icon: MessageSquare },
-  { to: "/visualize", label: "Visualize", mobileLabel: "Visual", icon: Eye },
+  { to: "/visualize", label: "Experience", mobileLabel: "Live", icon: Eye },
   { to: "/music", label: "Music", mobileLabel: "Music", icon: Music },
+  { to: "/film", label: "Film", mobileLabel: "Film", icon: Clapperboard },
 ] as const;
 
 export function SiteHeader() {
-  const { user, loading, signOut } = useAuth();
-  const [showAuth, setShowAuth] = useState(false);
-
   return (
     <>
       {/* ── desktop / tablet top bar ── */}
@@ -39,43 +33,7 @@ export function SiteHeader() {
                   {l.label}
                 </Link>
               ))}
-              {!loading && (
-                user ? (
-                  <div className="flex items-center gap-2 ml-2">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <User className="size-3" />
-                      {user.email?.split("@")[0]}
-                    </span>
-                    <Button variant="ghost" size="sm" className="rounded-full h-8 px-3 text-xs" onClick={() => signOut()}>
-                      <LogOut className="size-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button variant="ghost" size="sm" className="rounded-full h-8 px-3 text-xs ml-2 glass" onClick={() => setShowAuth(true)}>
-                    <LogIn className="size-3" />
-                    Sign in
-                  </Button>
-                )
-              )}
             </nav>
-
-            {/* mobile: just auth button in top bar */}
-            <div className="flex md:hidden items-center gap-2">
-              {!loading && (
-                user ? (
-                  <Button variant="ghost" size="sm" className="rounded-full h-8 px-3 text-xs" onClick={() => signOut()}>
-                    <User className="size-3 mr-1" />
-                    {user.email?.split("@")[0]}
-                    <LogOut className="size-3 ml-1" />
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="sm" className="rounded-full h-8 px-3 text-xs glass" onClick={() => setShowAuth(true)}>
-                    <LogIn className="size-3" />
-                    Sign in
-                  </Button>
-                )
-              )}
-            </div>
           </div>
         </div>
       </header>
@@ -101,8 +59,6 @@ export function SiteHeader() {
           </div>
         </div>
       </nav>
-
-      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
     </>
   );
 }

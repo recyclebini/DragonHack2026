@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { featuresToColor, type VoiceFeatures } from "@/lib/voice-color";
+import { featuresToColor, groupColor, type VoiceFeatures } from "@/lib/voice-color";
 
 export type AnalyzerState = "idle" | "listening" | "denied" | "error";
 
@@ -14,6 +14,7 @@ export function useVoiceAnalyzer() {
   const rafRef = useRef<number | null>(null);
   const smoothRef = useRef({ pitch: 150, brightness: 0.5, energy: 0, hnr: 0.5 });
   const samplesRef = useRef<string[]>([]);
+  const recentColorsRef = useRef<string[]>([]);
   const sampleIntervalRef = useRef<number | null>(null);
 
   const stop = useCallback((): string[] => {
@@ -38,6 +39,7 @@ export function useVoiceAnalyzer() {
 
   const start = useCallback(async () => {
     samplesRef.current = [];
+    recentColorsRef.current = [];
     if (sampleIntervalRef.current !== null) {
       clearInterval(sampleIntervalRef.current);
       sampleIntervalRef.current = null;
@@ -111,7 +113,13 @@ export function useVoiceAnalyzer() {
 
       const f: VoiceFeatures = { pitch: s.pitch, brightness: s.brightness, energy: s.energy, hnr: s.hnr };
       setFeatures(f);
-      setColor(featuresToColor(f));
+      const rawColor = featuresToColor(f);
+      recentColorsRef.current.push(rawColor);
+      if (recentColorsRef.current.length > 10) recentColorsRef.current.shift();
+      const liveColor = recentColorsRef.current.length >= 2
+        ? groupColor(recentColorsRef.current)
+        : rawColor;
+      setColor(liveColor);
 
       rafRef.current = requestAnimationFrame(loop);
     };
