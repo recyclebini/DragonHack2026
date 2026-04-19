@@ -14,7 +14,7 @@ const isConfigured = () =>
   import.meta.env.VITE_SUPABASE_URL !== "https://your-project.supabase.co";
 
 // ── localStorage fallback ─────────────────────────────────────────────────────
-const LS_KEY = "chromavoice.voices.v1";
+const LS_KEY = "seenesthesia.voices.v1";
 
 function lsGet(): SavedVoice[] {
   if (typeof window === "undefined") return [];

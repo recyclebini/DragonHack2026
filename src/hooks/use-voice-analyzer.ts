@@ -45,15 +45,31 @@ export function useVoiceAnalyzer() {
       sampleIntervalRef.current = null;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: false, // keep raw energy for color mapping
+        },
+      });
       streamRef.current = stream;
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx();
       ctxRef.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
+
+      // Soft noise gate: compressor reduces quiet noise floor without touching loud speech
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -50;
+      compressor.knee.value = 20;
+      compressor.ratio.value = 8;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
-      src.connect(analyser);
+      src.connect(compressor);
+      compressor.connect(analyser);
       analyserRef.current = analyser;
       setState("listening");
       sampleIntervalRef.current = window.setInterval(() => {

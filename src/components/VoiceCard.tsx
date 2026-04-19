@@ -19,7 +19,7 @@ export function VoiceCard({ voice }: Props) {
       const dataUrl = await toPng(ref.current, { pixelRatio: 2, cacheBust: true });
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `chromavoice-${voice.name || "voice"}.png`;
+      a.download = `seenesthesia-${voice.name || "voice"}.png`;
       a.click();
     } finally {
       setBusy(false);
@@ -41,7 +41,7 @@ export function VoiceCard({ voice }: Props) {
         >
           <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between text-white/85 text-xs font-mono">
             <span>{voice.hex.toUpperCase()}</span>
-            <span className="opacity-70">CHROMAVOICE</span>
+            <span className="opacity-70">SEENESTHESIA</span>
           </div>
         </div>
         <div className="space-y-2">

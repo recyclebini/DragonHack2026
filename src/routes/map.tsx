@@ -12,7 +12,7 @@ import chroma from "chroma-js";
 export const Route = createFileRoute("/map")({
   head: () => ({
     meta: [
-      { title: "Voice Map — Chromavoice" },
+      { title: "Voice Map — Seenesthesia" },
       { name: "description", content: "A constellation of voices, each one a glowing color." },
     ],
   }),

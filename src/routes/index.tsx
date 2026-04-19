@@ -14,9 +14,9 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Chromavoice — Turn your voice into a color" },
+      { title: "Seenesthesia — Turn your voice into a color" },
       { name: "description", content: "Speak into your mic and watch your voice become a living color. Save it, share it, find your harmony." },
-      { property: "og:title", content: "Chromavoice — Turn your voice into a color" },
+      { property: "og:title", content: "Seenesthesia — Turn your voice into a color" },
       { property: "og:description", content: "A poetic web instrument that paints your voice in real time." },
     ],
   }),

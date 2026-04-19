@@ -13,6 +13,9 @@ export type VoiceColor = {
   poem: string;
 };
 
+/** Idle / default voice color — matches `useVoiceAnalyzer` initial state and hero “a color” before input. */
+export const DEFAULT_VOICE_HEX = "#7a5cff";
+
 // CIELAB mapping — mirrors the Python script's Mapping A:
 //   pitch 80–300 Hz  → L* 20–90  (low pitch = dark, high pitch = bright)
 //   hnr   0–1        → a* -60–+80 (noisy/breathy = green, harmonic/clear = red)
@@ -94,7 +97,7 @@ export function harmonyScores(target: string, others: string[]): number[] {
 
 // Average the colors of a group of voices — for "group voice" feature
 export function groupColor(hexes: string[]): string {
-  if (hexes.length === 0) return "#7a5cff";
+  if (hexes.length === 0) return DEFAULT_VOICE_HEX;
   if (hexes.length === 1) return hexes[0];
   // Average in oklab for perceptually accurate blending
   const colors = hexes.map((h) => chroma(h).oklab());
