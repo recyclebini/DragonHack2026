@@ -2,6 +2,7 @@ export type WordTimestamp = {
   word: string;
   start: number;
   end: number;
+  speaker?: number;
 };
 
 // Isolate vocals before sending to STT:
@@ -82,7 +83,7 @@ export async function transcribeFile(file: File): Promise<WordTimestamp[]> {
   const processed = await preprocessForSTT(file);
 
   const res = await fetch(
-    "https://api.deepgram.com/v1/listen?model=whisper-large&language=en&words=true&punctuate=false",
+    "https://api.deepgram.com/v1/listen?model=nova-2&language=en&words=true&punctuate=false&diarize=true",
     {
       method: "POST",
       headers: {
@@ -106,5 +107,6 @@ export async function transcribeFile(file: File): Promise<WordTimestamp[]> {
     word: w.word,
     start: w.start,
     end: w.end,
+    speaker: w.speaker,
   }));
 }

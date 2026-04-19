@@ -1,8 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import chroma from "chroma-js";
 import { SiteHeader } from "@/components/SiteHeader";
 import { analyzeSegment } from "@/lib/audio-analysis";
-import { featuresToColor, applyEmotion, groupColor, nameForColor, poemForColor } from "@/lib/voice-color";
+import { fileKey, getCached, setCached } from "@/lib/audio-cache";
+import {
+  featuresToColor,
+  applyEmotion,
+  groupColor,
+  nameForColor,
+  poemForColor,
+  applyEmotionTint,
+  smoothColor,
+  expressionTypography,
+  identityColor,
+  FUNCTION_WORDS,
+} from "@/lib/voice-color";
 import type { VoiceFeatures } from "@/lib/voice-color";
 import { transcribeFile } from "@/lib/deepgram";
 import type { WordTimestamp } from "@/lib/deepgram";
@@ -17,8 +30,7 @@ type ColoredWord = {
   start: number;
   end: number;
   color: string;
-  fontStyle: "normal" | "italic";
-  fontWeight: number;
+  fontSize: string;
   textTransform: "none" | "uppercase";
 };
 
@@ -36,46 +48,39 @@ function FilmPage() {
   const [dragging, setDragging] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ x: number; label: string } | null>(null);
   const [transcriptWords, setTranscriptWords] = useState<ColoredWord[] | null>(null);
-  const [transcriptLoading, setTranscriptLoading] = useState(false);
-  const [transcriptError, setTranscriptError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const ribbonRef = useRef<HTMLDivElement>(null);
   const actxRef = useRef<AudioContext | null>(null);
-  const activeWordRef = useRef<HTMLSpanElement | null>(null);
-  const prevActiveIdxRef = useRef(-1);
 
   useEffect(() => () => { actxRef.current?.close(); }, []);
 
-  // Compute active word index from currentTime
-  const activeWordIdx = transcriptWords
-    ? transcriptWords.findIndex((w, i) => {
-        const nextStart = transcriptWords[i + 1]?.start ?? Infinity;
-        return currentTime >= w.start && currentTime < nextStart;
-      })
-    : -1;
+  const FILM_CACHE_KEY = "chromavoice.film.v1";
 
-  // Auto-scroll active word into view when it changes
-  useEffect(() => {
-    if (activeWordIdx !== prevActiveIdxRef.current && activeWordRef.current) {
-      activeWordRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      prevActiveIdxRef.current = activeWordIdx;
-    }
-  }, [activeWordIdx]);
+  type FilmCache = { segments: Segment[]; duration: number; transcriptWords: ColoredWord[] | null };
 
   const processFile = async (file: File) => {
     if (!/\.(mp4|webm|mov|mkv)$/i.test(file.name)) {
       alert("Unsupported format. Please use MP4, WebM, MOV, or MKV.");
       return;
     }
+
+    const cacheKey = fileKey(file);
+    const cached = getCached<FilmCache>(FILM_CACHE_KEY, cacheKey);
+    if (cached) {
+      setSegments(cached.segments);
+      setDuration(cached.duration);
+      setVideoUrl(URL.createObjectURL(file));
+      setTranscriptWords(cached.transcriptWords);
+      return;
+    }
+
     setProcessing(true);
     setProgress(0);
     setSegments([]);
     setVideoUrl(null);
     setCurrentTime(0);
     setTranscriptWords(null);
-    setTranscriptError(null);
-    setTranscriptLoading(false);
 
     const arrayBuffer = await file.arrayBuffer();
     const actx = new AudioContext();
@@ -114,21 +119,47 @@ function FilmPage() {
         actx.close();
         actxRef.current = null;
 
-        setTranscriptLoading(true);
         transcribeFile(file)
           .then((words: WordTimestamp[]) => {
+            // One scene-wide identity color, then rotate hue per speaker index.
+            // Acoustic features can't distinguish speakers in mixed audio, so we use
+            // index-based hue offsets (evenly spaced) to guarantee visual distinction.
+            const avgPitch = result.reduce((s, seg) => s + seg.features.pitch, 0) / result.length;
+            const avgBrightness = result.reduce((s, seg) => s + seg.features.brightness, 0) / result.length;
+            const sceneIdentity = identityColor({ pitch: avgPitch, brightness: avgBrightness, energy: 0, hnr: 0.5 });
+
+            const speakerIdxSet = new Set(words.map((w) => w.speaker ?? 0));
+            const speakerList = [...speakerIdxSet].sort((a, b) => a - b);
+            const speakerColors = new Map<number, string>();
+            speakerList.forEach((spk, i) => {
+              const [h, s, l] = chroma(sceneIdentity).hsl();
+              const hue = ((isNaN(h) ? 0 : h) + i * (360 / Math.max(speakerList.length, 2))) % 360;
+              speakerColors.set(spk, chroma.hsl(hue, isNaN(s) ? 0.65 : s, isNaN(l) ? 0.5 : l).hex());
+            });
+
+            let prevColor = result[0]?.color ?? "#7a5cff";
             const colored: ColoredWord[] = words.map((w) => {
               const segIdx = Math.max(0, Math.min(Math.floor(w.start / CHUNK), result.length - 1));
               const seg = result[segIdx];
+              const lower = w.word.toLowerCase().replace(/[^a-z]/g, "");
+              if (FUNCTION_WORDS.has(lower)) {
+                return { word: w.word, start: w.start, end: w.end, color: prevColor, fontSize: "1em", textTransform: "none" as const };
+              }
+              const spkBase = speakerColors.get(w.speaker ?? 0) ?? seg.color;
               const emo = applyEmotion(seg.color, seg.features);
-              return { word: w.word, start: w.start, end: w.end, color: emo.color, fontStyle: emo.fontStyle, fontWeight: emo.fontWeight, textTransform: emo.textTransform };
+              const labelMap: Record<string, string> = { Happy: "joy", Sad: "sadness", Intense: "anger", Nervous: "fear", Tender: "surprise", Neutral: "neutral" };
+              const emotionKey = labelMap[emo.emotionLabel] ?? "neutral";
+              const scores = { joy: 0, sadness: 0, anger: 0, fear: 0, disgust: 0, surprise: 0, neutral: 0, [emotionKey]: 1.0 };
+              const wordColor = smoothColor(prevColor, applyEmotionTint(spkBase, scores, 0.45));
+              prevColor = wordColor;
+              const typo = expressionTypography(emotionKey);
+              return { word: w.word, start: w.start, end: w.end, color: wordColor, fontSize: typo.fontSize, textTransform: typo.textTransform as "none" | "uppercase" };
             });
             setTranscriptWords(colored);
-            setTranscriptLoading(false);
+            setCached<FilmCache>(FILM_CACHE_KEY, cacheKey, { segments: result, duration: decoded.duration, transcriptWords: colored });
           })
-          .catch((err: Error) => {
-            setTranscriptError(err.message.includes("VITE_DEEPGRAM_API_KEY") ? "no-key" : "error");
-            setTranscriptLoading(false);
+          .catch(() => {
+            setCached<FilmCache>(FILM_CACHE_KEY, cacheKey, { segments: result, duration: decoded.duration, transcriptWords: null });
           });
       }
     };
@@ -136,7 +167,12 @@ function FilmPage() {
     processBatch(0);
   };
 
-  const soulHex = segments.length ? groupColor(segments.map((s) => s.color)) : null;
+  // Average only the top-energy segments — silent/background segments dominate and wash out the mean
+  const soulHex = segments.length ? (() => {
+    const sorted = [...segments].sort((a, b) => a.features.energy - b.features.energy);
+    const active = sorted.slice(Math.floor(sorted.length * 0.6)); // top 40% by energy
+    return groupColor(active.map((s) => s.color));
+  })() : null;
   const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // Words visible in the subtitle window: ±3 seconds around currentTime
@@ -195,17 +231,20 @@ function FilmPage() {
                     <p className="text-xl leading-relaxed">
                       {subtitleWords.map((w, i) => {
                         const isActive = currentTime >= w.start && currentTime < (subtitleWords[i + 1]?.start ?? Infinity);
+                        const prev = subtitleWords[i - 1]?.color ?? w.color;
                         return (
                           <span
                             key={`${w.start}-${i}`}
                             className="transition-all duration-150"
                             style={{
-                              color: w.color,
-                              fontStyle: w.fontStyle,
-                              fontWeight: isActive ? Math.max(w.fontWeight, 600) : w.fontWeight,
+                              background: `linear-gradient(to right, ${prev}, ${w.color})`,
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                              backgroundClip: "text",
                               textTransform: w.textTransform,
+                              fontSize: isActive ? `calc(${w.fontSize} * 1.18)` : w.fontSize,
                               opacity: isActive ? 1 : 0.55,
-                              fontSize: isActive ? "1.3rem" : "1.1rem",
+                              filter: isActive ? `drop-shadow(0 0 8px ${w.color}99)` : "none",
                             }}
                           >
                             {w.word}{" "}
@@ -215,7 +254,7 @@ function FilmPage() {
                     </p>
                   ) : (
                     <p className="text-muted-foreground text-sm">
-                      {transcriptWords ? "No speech here" : transcriptLoading ? "Transcribing…" : "Play the video to see subtitles"}
+                      {transcriptWords ? "No speech here" : "Play the video to see subtitles"}
                     </p>
                   )}
                 </div>
@@ -257,46 +296,6 @@ function FilmPage() {
               </div>
             </div>
 
-            {/* Transcript (karaoke) */}
-            <div>
-              <h2 className="font-display text-lg mb-3">Transcript</h2>
-              {transcriptLoading && <p className="text-sm text-muted-foreground">Generating transcript…</p>}
-              {transcriptError === "no-key" && (
-                <div className="glass rounded-xl p-4 text-sm text-muted-foreground">
-                  Add a <code className="font-mono text-xs">VITE_DEEPGRAM_API_KEY</code> to enable word-level transcript coloring.
-                </div>
-              )}
-              {transcriptError === "error" && (
-                <div className="glass rounded-xl p-4 text-sm text-destructive">
-                  Transcript failed. Check your Deepgram API key.
-                </div>
-              )}
-              {transcriptWords !== null && !transcriptLoading && !transcriptError && (
-                <div className="glass rounded-xl p-5 leading-relaxed text-base max-h-48 overflow-y-auto">
-                  {transcriptWords.map((w, i) => {
-                    const isActive = i === activeWordIdx;
-                    return (
-                      <span
-                        key={i}
-                        ref={isActive ? activeWordRef : undefined}
-                        className="transition-all duration-100"
-                        style={{
-                          color: w.color,
-                          fontStyle: w.fontStyle,
-                          fontWeight: isActive ? Math.max(w.fontWeight, 600) : w.fontWeight,
-                          textTransform: w.textTransform,
-                          opacity: isActive ? 1 : 0.6,
-                          textShadow: isActive ? `0 0 12px ${w.color}88` : "none",
-                        }}
-                      >
-                        {w.word}{" "}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* Soul orb */}
             {soulHex && (
               <div className="flex flex-col sm:flex-row items-center gap-6 glass rounded-2xl p-6">
@@ -311,7 +310,7 @@ function FilmPage() {
             )}
 
             <button
-              onClick={() => { actxRef.current?.close(); actxRef.current = null; setSegments([]); setVideoUrl(null); setCurrentTime(0); setProgress(0); setTranscriptWords(null); setTranscriptError(null); setTranscriptLoading(false); }}
+              onClick={() => { actxRef.current?.close(); actxRef.current = null; setSegments([]); setVideoUrl(null); setCurrentTime(0); setProgress(0); setTranscriptWords(null); }}
               className="text-sm text-muted-foreground hover:text-foreground transition"
             >
               ← Try another file

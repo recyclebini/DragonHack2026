@@ -4,7 +4,16 @@ import { Mic, Square, Trash2 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { VoiceBlob } from "@/components/VoiceBlob";
 import { useVoiceAnalyzer } from "@/hooks/use-voice-analyzer";
-import { applyEmotion } from "@/lib/voice-color";
+import {
+  applyEmotion,
+  emotionToLab,
+  applyTimbreNudge,
+  labToHex,
+  smoothColor,
+  expressionTypography,
+  identityColor,
+  FUNCTION_WORDS,
+} from "@/lib/voice-color";
 import type { VoiceFeatures } from "@/lib/voice-color";
 
 export const Route = createFileRoute("/conversation")({
@@ -14,8 +23,7 @@ export const Route = createFileRoute("/conversation")({
 type TranscriptWord = {
   word: string;
   color: string;
-  fontStyle: "normal" | "italic";
-  fontWeight: number;
+  fontSize: string;
   textTransform: "none" | "uppercase";
 };
 
@@ -39,6 +47,79 @@ function downsample(buffer: Float32Array, fromRate: number, toRate: number): Int
   return out;
 }
 
+async function classifyEmotion(text: string): Promise<Record<string, number>> {
+  const key = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
+  if (!key) throw new Error("no-key");
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      system:
+        "You are an emotion classifier. Given text, return ONLY a JSON object with exactly these keys: joy, sadness, anger, fear, disgust, surprise, neutral. Values are confidence scores that must sum to 1.0. No other text.",
+      messages: [{ role: "user", content: text }],
+    }),
+  });
+
+  if (!response.ok) throw new Error("api-error");
+  const data = (await response.json()) as { content: Array<{ text: string }> };
+  return JSON.parse(data.content[0].text) as Record<string, number>;
+}
+
+function emotionLabelToScores(label: string): Record<string, number> {
+  const base = { joy: 0, sadness: 0, anger: 0, fear: 0, disgust: 0, surprise: 0, neutral: 0 };
+  const map: Record<string, keyof typeof base> = {
+    Happy: "joy",
+    Sad: "sadness",
+    Intense: "anger",
+    Nervous: "fear",
+    Tender: "surprise",
+    Neutral: "neutral",
+  };
+  const key = map[label] ?? "neutral";
+  return { ...base, [key]: 1.0 };
+}
+
+function buildExpressionWords(
+  words: Array<{ word: string }>,
+  scores: Record<string, number>,
+  identityHex: string,
+  prevColor: string
+): { words: TranscriptWord[]; lastColor: string } {
+  const dominantEmotion = Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "neutral";
+  const [L, a, b] = emotionToLab(scores);
+  const [nL, na, nb] = applyTimbreNudge(L, a, b, identityHex);
+  const targetColor = labToHex(nL, na, nb);
+
+  let currentColor = prevColor;
+  const result: TranscriptWord[] = [];
+
+  for (const w of words) {
+    const lower = w.word.toLowerCase().replace(/[^a-z]/g, "");
+    if (FUNCTION_WORDS.has(lower)) {
+      result.push({ word: w.word, color: currentColor, fontSize: "1em", textTransform: "none" });
+    } else {
+      currentColor = smoothColor(currentColor, targetColor);
+      const typo = expressionTypography(dominantEmotion);
+      result.push({
+        word: w.word,
+        color: currentColor,
+        fontSize: typo.fontSize,
+        textTransform: typo.textTransform as "none" | "uppercase",
+      });
+    }
+  }
+
+  return { words: result, lastColor: currentColor };
+}
+
 function ConversationPage() {
   const [transcript, setTranscript] = useState<TranscriptWord[]>([]);
   const [recording, setRecording] = useState(false);
@@ -53,6 +134,7 @@ function ConversationPage() {
   const dgProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const colorRef = useRef<string>(color);
   const featuresRef = useRef<VoiceFeatures>(features);
+  const prevColorRef = useRef<string>(color);
 
   useEffect(() => { colorRef.current = color; }, [color]);
   useEffect(() => { featuresRef.current = features; }, [features]);
@@ -129,22 +211,30 @@ function ConversationPage() {
         try {
           const data = JSON.parse(evt.data as string) as {
             is_final?: boolean;
-            channel?: { alternatives?: Array<{ words?: Array<{ word: string }> }> };
+            channel?: { alternatives?: Array<{ words?: Array<{ word: string }>; transcript?: string }> };
           };
           if (!data.is_final) return;
           const words = data.channel?.alternatives?.[0]?.words ?? [];
           if (!words.length) return;
-          const emo = applyEmotion(colorRef.current, featuresRef.current);
-          setTranscript((prev) => [
-            ...prev,
-            ...words.map((w) => ({
-              word: w.word,
-              color: emo.color,
-              fontStyle: emo.fontStyle,
-              fontWeight: emo.fontWeight,
-              textTransform: emo.textTransform,
-            })),
-          ]);
+
+          const transcript = data.channel?.alternatives?.[0]?.transcript ?? words.map((w) => w.word).join(" ");
+          const currentIdentityHex = identityColor(featuresRef.current);
+          const currentPrevColor = prevColorRef.current;
+
+          classifyEmotion(transcript)
+            .then((scores) => {
+              const { words: colored, lastColor } = buildExpressionWords(words, scores, currentIdentityHex, currentPrevColor);
+              prevColorRef.current = lastColor;
+              setTranscript((prev) => [...prev, ...colored]);
+            })
+            .catch(() => {
+              // Fallback: heuristic emotion
+              const emo = applyEmotion(colorRef.current, featuresRef.current);
+              const scores = emotionLabelToScores(emo.emotionLabel);
+              const { words: colored, lastColor } = buildExpressionWords(words, scores, currentIdentityHex, currentPrevColor);
+              prevColorRef.current = lastColor;
+              setTranscript((prev) => [...prev, ...colored]);
+            });
         } catch {}
       };
 
@@ -220,19 +310,24 @@ function ConversationPage() {
             </p>
           ) : (
             <p className="leading-relaxed text-lg">
-              {transcript.map((w, i) => (
-                <span
-                  key={i}
-                  style={{
-                    color: w.color,
-                    fontStyle: w.fontStyle,
-                    fontWeight: w.fontWeight,
-                    textTransform: w.textTransform,
-                  }}
-                >
-                  {w.word}{" "}
-                </span>
-              ))}
+              {transcript.map((w, i) => {
+                const prev = transcript[i - 1]?.color ?? w.color;
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      background: `linear-gradient(to right, ${prev}, ${w.color})`,
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                      fontSize: w.fontSize,
+                      textTransform: w.textTransform,
+                    }}
+                  >
+                    {w.word}{" "}
+                  </span>
+                );
+              })}
             </p>
           )}
         </div>
