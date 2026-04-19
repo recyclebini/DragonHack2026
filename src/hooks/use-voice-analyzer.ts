@@ -3,11 +3,25 @@ import { featuresToColor, groupColor, type VoiceFeatures } from "@/lib/voice-col
 
 
 export type AnalyzerState = "idle" | "listening" | "denied" | "error";
+type UseVoiceAnalyzerOptions = {
+  loudnessOnly?: boolean;
+};
+export type LoudnessMetrics = {
+  rms: number; // raw 0..1 from time-domain samples
+  dbfs: number; // decibels relative to full scale (0 dBFS max, typical speech negative)
+};
 
-export function useVoiceAnalyzer() {
+export function useVoiceAnalyzer(options: UseVoiceAnalyzerOptions = {}) {
+  const { loudnessOnly = false } = options;
   const [state, setState] = useState<AnalyzerState>("idle");
   const [color, setColor] = useState<string>("#7a5cff");
-  const [features, setFeatures] = useState<VoiceFeatures>({ pitch: 0, brightness: 0.5, energy: 0, hnr: 0.5 });
+  const [loudness, setLoudness] = useState<LoudnessMetrics>({ rms: 0, dbfs: -100 });
+  const [features, setFeatures] = useState<VoiceFeatures>({
+    pitch: 0,
+    brightness: 0.5,
+    energy: 0,
+    hnr: 0.5,
+  });
 
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,12 +47,13 @@ export function useVoiceAnalyzer() {
     ctxRef.current = null;
     analyserRef.current = null;
     setState("idle");
+    setLoudness({ rms: 0, dbfs: -100 });
     const collected = [...samplesRef.current];
     samplesRef.current = [];
     return collected;
   }, []);
 
-  const start = useCallback(async (externalStream?: MediaStream) => {
+  const start = async (externalStream?: MediaStream) => {
     samplesRef.current = [];
     recentColorsRef.current = [];
     if (sampleIntervalRef.current !== null) {
@@ -48,30 +63,35 @@ export function useVoiceAnalyzer() {
     try {
       const stream = externalStream ?? await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: true,
-          echoCancellation: true,
+          noiseSuppression: !loudnessOnly,
+          echoCancellation: !loudnessOnly,
           autoGainControl: false,
         },
       });
       // Only take ownership (and stop tracks on cleanup) if we created the stream
       if (!externalStream) streamRef.current = stream;
-      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx();
       ctxRef.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
 
-      // Soft noise gate: compressor reduces quiet noise floor without touching loud speech
-      const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -50;
-      compressor.knee.value = 20;
-      compressor.ratio.value = 8;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.25;
-
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
-      src.connect(compressor);
-      compressor.connect(analyser);
+      if (loudnessOnly) {
+        src.connect(analyser);
+      } else {
+        // Soft noise gate: compressor reduces quiet noise floor without touching loud speech
+        const compressor = ctx.createDynamicsCompressor();
+        compressor.threshold.value = -50;
+        compressor.knee.value = 20;
+        compressor.ratio.value = 8;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+        src.connect(compressor);
+        compressor.connect(analyser);
+      }
       analyserRef.current = analyser;
       setState("listening");
       sampleIntervalRef.current = window.setInterval(() => {
@@ -83,7 +103,7 @@ export function useVoiceAnalyzer() {
       console.error(e);
       setState((e as Error).name === "NotAllowedError" ? "denied" : "error");
     }
-  }, []);
+  };
 
   const tick = () => {
     const analyser = analyserRef.current;
@@ -101,8 +121,13 @@ export function useVoiceAnalyzer() {
       let sum = 0;
       for (let i = 0; i < time.length; i++) sum += time[i] * time[i];
       const rms = Math.sqrt(sum / time.length);
-      const energy = Math.min(1, rms * 6);
+      const dbfs = rms > 0 ? 20 * Math.log10(rms) : -100;
+      const energy = Math.min(1, rms * (loudnessOnly ? 12 : 6));
+      setLoudness({ rms, dbfs: Math.max(-100, Math.min(0, dbfs)) });
 
+      let brightness = 0.5;
+      let pitch = smoothRef.current.pitch;
+      let hnr = 0;
       let num = 0;
       let den = 0;
       for (let i = 0; i < freq.length; i++) {
@@ -112,39 +137,54 @@ export function useVoiceAnalyzer() {
       const centroidBin = den > 0 ? num / den : 0;
       const nyquist = ctx.sampleRate / 2;
       const centroidHz = (centroidBin / freq.length) * nyquist;
-      const brightness = Math.min(1, Math.max(0, (centroidHz - 500) / (4000 - 500)));
+      brightness = Math.min(1, Math.max(0, (centroidHz - 500) / (4000 - 500)));
 
-      let pitch = smoothRef.current.pitch;
-      let hnr = 0;
       if (energy > 0.04) {
         const { hz, clarity } = autoCorrelate(time, ctx.sampleRate);
-        if (hz > 0) { pitch = hz; hnr = clarity; }
+        if (hz > 0) {
+          pitch = hz;
+        }
+        hnr = clarity;
       }
 
       const s = smoothRef.current;
+      const energyAlpha = loudnessOnly ? 0.9 : 0.4;
       s.pitch = s.pitch * 0.7 + pitch * 0.3;
       s.brightness = s.brightness * 0.8 + brightness * 0.2;
-      s.energy = s.energy * 0.6 + energy * 0.4;
+      s.energy = s.energy * (1 - energyAlpha) + energy * energyAlpha;
       s.hnr = s.hnr * 0.7 + hnr * 0.3;
 
-      const f: VoiceFeatures = { pitch: s.pitch, brightness: s.brightness, energy: s.energy, hnr: s.hnr };
+      const f: VoiceFeatures = {
+        pitch: s.pitch,
+        brightness: s.brightness,
+        energy: s.energy,
+        hnr: s.hnr,
+      };
       setFeatures(f);
       const rawColor = featuresToColor(f);
-      recentColorsRef.current.push(rawColor);
-      if (recentColorsRef.current.length > 10) recentColorsRef.current.shift();
-      const liveColor = recentColorsRef.current.length >= 2
-        ? groupColor(recentColorsRef.current)
-        : rawColor;
-      setColor(liveColor);
+      if (!loudnessOnly) {
+        recentColorsRef.current.push(rawColor);
+        if (recentColorsRef.current.length > 10) recentColorsRef.current.shift();
+        const liveColor =
+          recentColorsRef.current.length >= 2 ? groupColor(recentColorsRef.current) : rawColor;
+        setColor(liveColor);
+      } else {
+        setColor(rawColor);
+      }
 
       rafRef.current = requestAnimationFrame(loop);
     };
     loop();
   };
 
-  useEffect(() => () => { stop(); }, [stop]);
+  useEffect(
+    () => () => {
+      stop();
+    },
+    [stop],
+  );
 
-  return { state, start, stop, color, features };
+  return { state, start, stop, color, features, loudness };
 }
 
 function autoCorrelate(buf: Float32Array, sampleRate: number): { hz: number; clarity: number } {
@@ -158,8 +198,16 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): { hz: number; cla
   let r1 = 0;
   let r2 = SIZE - 1;
   const thres = 0.2;
-  for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
-  for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+  for (let i = 0; i < SIZE / 2; i++)
+    if (Math.abs(buf[i]) < thres) {
+      r1 = i;
+      break;
+    }
+  for (let i = 1; i < SIZE / 2; i++)
+    if (Math.abs(buf[SIZE - i]) < thres) {
+      r2 = SIZE - i;
+      break;
+    }
   const trimmed = buf.slice(r1, r2);
   const newSize = trimmed.length;
 
@@ -172,7 +220,10 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): { hz: number; cla
   let maxval = -1;
   let maxpos = -1;
   for (let i = d; i < newSize; i++) {
-    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+    if (c[i] > maxval) {
+      maxval = c[i];
+      maxpos = i;
+    }
   }
   let T0 = maxpos;
   if (T0 <= 0) return none;

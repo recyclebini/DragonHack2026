@@ -37,3 +37,6 @@ memory/
 *.sln
 *.sw?
 
+.cursor/
+.env
+
