@@ -43,7 +43,7 @@ const HUE_FAMILIES = [
   { label: "Pink",   color: "#e91e63", test: (h: number) => h >= 320 && h < 340 },
 ] as const;
 
-export function MapPage({ hideSiteHeader }: { hideSiteHeader?: boolean } = {}) {
+function MapPage({ hideSiteHeader }: { hideSiteHeader?: boolean } = {}) {
   const [voices, setVoices] = useState<SavedVoice[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showHarmony, setShowHarmony] = useState(false);
